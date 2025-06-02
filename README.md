@@ -7,4 +7,4 @@ Explanation:
 
 2. postman folder: postman collections to test the environment
 
-3. documentation folder: documentstion about setup and configuration of the dataspace and architecture documentation
+3. documentation folder: documentation about setup and configuration of the dataspace and architecture documentation
