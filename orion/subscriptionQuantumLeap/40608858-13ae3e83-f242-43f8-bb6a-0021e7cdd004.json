@@ -1,0 +1,62 @@
+{
+	"info": {
+		"_postman_id": "40608858-13ae3e83-f242-43f8-bb6a-0021e7cdd004",
+		"name": "FIWARE Orion - Subscription voor QuantumLeap (Streetlight)",
+		"description": "Maakt een abonnement aan in FIWARE Orion om wijzigingen in Streetlight.illuminanceLevel te notificeren aan QuantumLeap.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Abonnement Aanmaken voor QuantumLeap (Streetlight illuminanceLevel)",
+			"id": "40608858-37aa1606-e786-4def-8d4b-f1240beeb242",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Fiware-Service",
+						"value": "fiware",
+						"type": "text"
+					},
+					{
+						"key": "Fiware-ServicePath",
+						"value": "/iot",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"description\": \"Notify QuantumLeap of Streetlight illuminanceLevel changes\",\n    \"subject\": {\n        \"entities\": [\n            {\n                \"idPattern\": \".*\",\n                \"type\": \"Streetlight\"\n            }\n        ],\n        \"condition\": {\n            \"attrs\": [\n                \"illuminanceLevel\"\n            ]\n        }\n    },\n    \"notification\": {\n        \"http\": {\n            \"url\": \"http://quantumleap:8668/v2/notify\"\n        },\n        \"attrs\": [\n            \"illuminanceLevel\"\n        ],\n        \"attrsFormat\": \"normalized\"\n    },\n    \"throttling\": 1\n}"
+				},
+				"url": {
+					"raw": "http://{{orion_host}}:1026/v2/subscriptions",
+					"protocol": "http",
+					"host": [
+						"{{orion_host}}"
+					],
+					"port": "1026",
+					"path": [
+						"v2",
+						"subscriptions"
+					]
+				},
+				"description": "Maakt het abonnement aan zodat QuantumLeap notificaties ontvangt voor Streetlight.illuminanceLevel wijzigingen."
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "orion_host",
+			"value": "192.168.1.234",
+			"type": "string"
+		}
+	]
+}
