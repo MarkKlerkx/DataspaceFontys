@@ -1,0 +1,72 @@
+{
+	"info": {
+		"_postman_id": "40608858-fdce9a5f-0b2c-49a8-856d-ee1506d6e104",
+		"name": "FIWARE Orion - Alle Streetlights Ophalen Copy",
+		"description": "Een enkele query om alle entiteiten van het type 'Streetlight' op te halen van de FIWARE Orion Context Broker. Bedoeld voor troubleshooting.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Alle Streetlights Ophalen (op type)",
+			"id": "40608858-8069d3a8-32fe-40cd-9f8a-d924a386c886",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Fiware-Service",
+						"value": "fiware",
+						"type": "text"
+					},
+					{
+						"key": "Fiware-ServicePath",
+						"value": "/iot",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://{{orion_host}}:1026/v2/entities?type=Streetlight&attrs=illuminanceLevel&options=keyValues",
+					"protocol": "http",
+					"host": [
+						"{{orion_host}}"
+					],
+					"port": "1026",
+					"path": [
+						"v2",
+						"entities"
+					],
+					"query": [
+						{
+							"key": "type",
+							"value": "Streetlight"
+						},
+						{
+							"key": "attrs",
+							"value": "illuminanceLevel"
+						},
+						{
+							"key": "options",
+							"value": "keyValues"
+						}
+					]
+				},
+				"description": "Haalt alle entiteiten van het type Streetlight op om te controleren welke ID's bestaan."
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "orion_host",
+			"value": "192.168.1.234",
+			"type": "string"
+		}
+	]
+}
