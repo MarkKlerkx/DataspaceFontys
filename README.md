@@ -2,6 +2,9 @@
 Dataspace Reference Implementation
 
 Explanation:
-docker folder: docker-compose files
-postman folder: postman collections to test the environment
-documentation folder: documentstion about setup and configuration of the dataspace and architecture documentation
+
+1. docker folder: docker-compose files
+
+2. postman folder: postman collections to test the environment
+
+3. documentation folder: documentstion about setup and configuration of the dataspace and architecture documentation
