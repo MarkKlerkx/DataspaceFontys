@@ -1,0 +1,79 @@
+{
+	"info": {
+		"_postman_id": "40608858-c81b8145-bcad-4354-ba5a-b1cbdb93bb31",
+		"name": "QuantumLeap - Query Streetlight Geschiedenis",
+		"description": "Haalt historische data op voor een attribuut van een Streetlight entiteit uit QuantumLeap.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Haal Geschiedenis op voor Streetlight.illuminanceLevel",
+			"id": "40608858-dbe6c769-7787-45ef-a21c-393f07bdec7c",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Fiware-Service",
+						"value": "fiware",
+						"type": "text"
+					},
+					{
+						"key": "Fiware-ServicePath",
+						"value": "/iot",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://{{ql_host}}:{{ql_port}}/v2/entities/{{streetlight_id_example}}/attrs/illuminanceLevel?lastN=10",
+					"protocol": "http",
+					"host": [
+						"{{ql_host}}"
+					],
+					"port": "{{ql_port}}",
+					"path": [
+						"v2",
+						"entities",
+						"{{streetlight_id_example}}",
+						"attrs",
+						"illuminanceLevel"
+					],
+					"query": [
+						{
+							"key": "lastN",
+							"value": "10",
+							"description": "Haal de laatste N waardes op"
+						}
+					]
+				},
+				"description": "Haalt de laatste 10 historische waardes op van het 'illuminanceLevel' attribuut voor de opgegeven streetlight ID."
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "ql_host",
+			"value": "192.168.1.234",
+			"type": "string"
+		},
+		{
+			"key": "ql_port",
+			"value": "8668",
+			"type": "string"
+		},
+		{
+			"key": "streetlight_id_example",
+			"value": "urn:ngsi-ld:Streetlight:Madrid:001",
+			"type": "string",
+			"description": "Voorbeeld ID van de streetlight. Pas aan indien nodig."
+		}
+	]
+}
