@@ -1,0 +1,220 @@
+{
+	"info": {
+		"_postman_id": "40608858-82ebaa92-2155-4b40-9cc6-24cfdbc58bea",
+		"name": "FIWARE Orion - IlluminanceLevel streetlight",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "FIWARE Orion - IlluminanceLevel streetlight",
+			"id": "40608858-480e5642-27fa-4683-9db6-65b2bd55ab26",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "PATCH",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Fiware-Service",
+						"value": "fiware",
+						"type": "text"
+					},
+					{
+						"key": "Fiware-ServicePath",
+						"value": "/iot",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"illuminanceLevel\": {\r\n        \"type\": \"Number\",\r\n        \"value\": 890\r\n    }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://{{orion_host}}:1026/v2/entities/urn:ngsi-ld:Streetlight:Madrid:001/attrs",
+					"protocol": "http",
+					"host": [
+						"{{orion_host}}"
+					],
+					"port": "1026",
+					"path": [
+						"v2",
+						"entities",
+						"urn:ngsi-ld:Streetlight:Madrid:001",
+						"attrs"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Alle Streetlights Ophalen IlluminanceLevel streetlights",
+			"id": "40608858-91f96c6e-768b-414d-9d37-64daa1640265",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Fiware-Service",
+						"value": "fiware",
+						"type": "text"
+					},
+					{
+						"key": "Fiware-ServicePath",
+						"value": "/iot",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://{{orion_host}}:1026/v2/entities?type=Streetlight&attrs=illuminanceLevel&options=keyValues",
+					"protocol": "http",
+					"host": [
+						"{{orion_host}}"
+					],
+					"port": "1026",
+					"path": [
+						"v2",
+						"entities"
+					],
+					"query": [
+						{
+							"key": "type",
+							"value": "Streetlight"
+						},
+						{
+							"key": "attrs",
+							"value": "illuminanceLevel"
+						},
+						{
+							"key": "options",
+							"value": "keyValues"
+						}
+					]
+				}
+			},
+			"response": [
+				{
+					"id": "40608858-81694dc5-9748-4ea7-b19f-6234542a6a6a",
+					"name": "Alle Streetlights Ophalen IlluminanceLevel streetlights",
+					"originalRequest": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Fiware-Service",
+								"value": "fiware",
+								"type": "text"
+							},
+							{
+								"key": "Fiware-ServicePath",
+								"value": "/iot",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "http://{{orion_host}}:1026/v2/entities?type=Streetlight&attrs=illuminanceLevel&options=keyValues",
+							"protocol": "http",
+							"host": [
+								"{{orion_host}}"
+							],
+							"port": "1026",
+							"path": [
+								"v2",
+								"entities"
+							],
+							"query": [
+								{
+									"key": "type",
+									"value": "Streetlight"
+								},
+								{
+									"key": "attrs",
+									"value": "illuminanceLevel"
+								},
+								{
+									"key": "options",
+									"value": "keyValues"
+								}
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Date",
+							"value": "Sun, 01 Jun 2025 19:12:15 GMT"
+						},
+						{
+							"key": "Fiware-Correlator",
+							"value": "5475aaa2-3f1c-11f0-99e0-ae924994d064"
+						},
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						},
+						{
+							"key": "Content-Length",
+							"value": "218"
+						}
+					],
+					"cookie": [],
+					"responseTime": null,
+					"body": "[\n    {\n        \"id\": \"urn:ngsi-ld:Streetlight:Madrid:001\",\n        \"type\": \"Streetlight\",\n        \"illuminanceLevel\": 85\n    },\n    {\n        \"id\": \"urn:ngsi-ld:Streetlight:Madrid:002\",\n        \"type\": \"Streetlight\"\n    },\n    {\n        \"id\": \"urn:ngsi-ld:Streetlight:Madrid:003\",\n        \"type\": \"Streetlight\"\n    }\n]"
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"id": "77d4d3b5-e9ae-4a42-8084-85e30c814c3d",
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"id": "dbfaa554-87eb-4f4b-be2e-6c133caba706",
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "orion_host",
+			"value": "192.168.1.234",
+			"type": "string"
+		}
+	]
+}
