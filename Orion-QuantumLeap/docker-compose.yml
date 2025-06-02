@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  # MongoDB voor Orion Context Broker
+  mongo-orion:
+    image: mongo:latest
+    hostname: mongo-orion
+    container_name: mongo-orion
+    ports:
+      - "27017:27017" # Poort voor MongoDB, eventueel toegankelijk vanaf de host
+    networks:
+      - dataspace
+    volumes:
+      - mongo-data:/data/db # Persistentie voor MongoDB data
+    restart: always
+
+  # FIWARE Orion Context Broker
+  orion:
+    image: fiware/orion:latest
+    hostname: orion
+    container_name: orion
+    depends_on:
+      - mongo-orion # Orion start pas nadat mongo-orion gestart is
+    networks:
+      - dataspace
+    ports:
+      - "1026:1026" # Standaardpoort voor Orion
+    command: -dbURI mongodb://mongo-orion:27017/orion -logLevel INFO
+    restart: always
+
+  # CrateDB voor QuantumLeap
+  cratedb-ql:
+    image: crate:latest
+    hostname: cratedb-ql
+    container_name: cratedb-ql
+    ports:
+      - "4200:4200" # HTTP-poort voor CrateDB Admin UI en API
+      - "5432:5432" # PostgreSQL protocol poort (optioneel)
+    networks:
+      - dataspace
+    command: crate -Cdiscovery.type=single-node -Ccluster.name=democluster -Chttp.cors.enabled=true -Chttp.cors.allow-origin="*"
+    volumes:
+      - cratedb-data:/data # Persistentie voor CrateDB data
+    restart: always
+
+  # QuantumLeap API
+  quantumleap:
+    image: fiware/quantum-leap:latest
+    hostname: quantumleap
+    container_name: quantumleap
+    depends_on:
+      - cratedb-ql # QuantumLeap start pas nadat cratedb-ql gestart is
+      - orion      # Logische afhankelijkheid; Orion moet notificaties kunnen sturen
+    networks:
+      - dataspace
+    ports:
+      - "8668:8668" # Standaardpoort voor QuantumLeap
+    environment:
+      - CRATE_HOST=cratedb-ql # Vertelt QuantumLeap waar CrateDB draait
+      # CRATE_PORT default is 4200, wat overeenkomt met cratedb-ql's configuratie
+      - QL_DEFAULT_SERVICE=fiware           # Optioneel: standaard FIWARE service header
+      - QL_DEFAULT_SERVICE_PATH=/iot       # Optioneel: standaard FIWARE service path header
+      - LOGLEVEL=INFO                   # Log niveau (DEBUG voor meer details)
+    restart: always
+
+# Netwerk definitie
+networks:
+  dataspace:
+    driver: bridge
+
+# Volume definities voor persistente data
+volumes:
+  mongo-data:
+  cratedb-data:

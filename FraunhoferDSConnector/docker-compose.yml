@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database voor de Data Provider Connector
+  postgres-dsc-provider:
+    image: postgres:13
+    container_name: postgres-dsc-provider
+    hostname: postgres-dsc-provider
+    environment:
+      - POSTGRES_USER=dsc_provider_admin
+      - POSTGRES_PASSWORD=D@t@Sp@ce
+      - POSTGRES_DB=dsc_provider_db
+    ports:
+      - "5434:5432" # Externe poort 5434 om conflict met andere postgres/cratedb te voorkomen
+    networks:
+      - orion_dataspace # Verbindt met het gedeelde 'dataspace' netwerk
+    volumes:
+      - postgres-dsc-provider-data:/var/lib/postgresql/data
+    restart: always
+
+  # Data Provider Connector (Sovity Dataspace Connector CE)
+  dataspace-connector-provider:
+    image: ghcr.io/international-data-spaces-association/dataspace-connector:latest
+    container_name: dataspace-connector-provider
+    hostname: dataspace-connector-provider
+    depends_on:
+      - postgres-dsc-provider
+      # - orion 
+      # - quantumleap
+    ports:
+      - "8080:8080" # Voor IDS Multipart Endpoint & Backend UI van de Provider Connector
+      - "8081:8081" # Prometheus Metrics (optioneel)
+    networks:
+      - orion_dataspace # Verbindt met het gedeelde 'dataspace' netwerk
+    environment:
+      # Database connectie
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-dsc-provider:5432/dsc_provider_db
+      - SPRING_DATASOURCE_USERNAME=dsc_provider_admin
+      - SPRING_DATASOURCE_PASSWORD=D@t@Sp@ce
+      - SPRING_DATASOURCE_DRIVER_CLASS_NAME=org.postgresql.Driver
+      
+      # Basis IDS Identificatie voor de Provider Connector (pas deze aan)
+      - IDS_TITLE=Smart City Streetlight Data Provider Connector (FIWARE Streetlight Data)
+      - IDS_DESCRIPTION=This connector will give you access to Smart City Streetlight data.
+      - IDS_MAINTAINER_URL=https://provider.example.com # Vervang door jouw URL
+      - IDS_CURATOR_URL=https://provider.example.com   # Vervang door jouw URL
+      - IDS_ENDPOINT_URL=http://dataspace-connector-provider:8080 # Interne URL voor zelfbeschrijving
+      
+      # Credentials voor de Backend UI
+      - SPRING_SECURITY_USER_NAME=admin_provider
+      - SPRING_SECURITY_USER_PASSWORD=D3t3Sp3ce      
+      # Standaardinstellingen voor eenvoud
+      - SERVER_SSL_ENABLED=false
+      - IDS_DAPS_VALIDATE_INCOMING=false # Schakel DAPS validatie uit voor eenvoudige tests
+      # - DAPS_URL= # Leeg laten voor nu indien geen DAPS gebruikt wordt
+      # - IDS_TRUSTED_CONNECTOR_IDSCP_URL= # Leeg laten voor Trusted Connector integratie
+      - IDS_SECURITY_PROFILE=BASE_SECURITY_PROFILE # Of een ander relevant profiel
+      
+    restart: always
+
+  dataspace-connector-ui:
+    image: ghcr.io/international-data-spaces-association/dataspace-connector-ui:latest
+    container_name: dataspace-connector-ui
+    hostname: dataspace-connector-ui
+    depends_on:
+      - dataspace-connector-provider # UI start nadat backend gestart is
+    ports:
+      - "8083:8083" # UI zal toegankelijk zijn op poort 8088 van je host
+    networks:
+      - orion_dataspace
+    environment:
+        - CONNECTOR_URL=http://dataspace-connector-provider:8080
+        - CONNECTOR_USER=admin_provider
+        - CONNECTOR_PASSWORD=D3t3Sp3ce
+    restart: always
+
+networks:
+  orion_dataspace:
+    external: true
+
+volumes:
+  postgres-dsc-provider-data: # Volume voor de database van deze provider connector
