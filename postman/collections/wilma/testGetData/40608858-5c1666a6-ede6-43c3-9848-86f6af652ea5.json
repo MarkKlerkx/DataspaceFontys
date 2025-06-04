@@ -44,22 +44,22 @@
 						},
 						{
 							"key": "username",
-							"value": "YOUR_KEYROCK_USERNAME",
+							"value": "wilma.test@test.com",
 							"type": "text"
 						},
 						{
 							"key": "password",
-							"value": "YOUR_KEYROCK_PASSWORD",
+							"value": "12345ABCD",
 							"type": "text"
 						},
 						{
 							"key": "client_id",
-							"value": "YOUR_KEYROCK_CLIENT_ID",
+							"value": "b08a2f67-1872-4962-91d1-b630802e6ac1",
 							"type": "text"
 						},
 						{
 							"key": "client_secret",
-							"value": "YOUR_KEYROCK_CLIENT_SECRET",
+							"value": "edfc92fc-f78d-4a66-83c1-fda359a89479",
 							"type": "text"
 						}
 					]
