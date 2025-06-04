@@ -102,10 +102,15 @@
 					}
 				],
 				"url": {
-					"raw": "YOUR_WILMA_PEP_PROXY_URL/orion/v2/entities",
+					"raw": "http://192.168.1.234:1338/orion/v2/entities",
+					"protocol": "http",
 					"host": [
-						"YOUR_WILMA_PEP_PROXY_URL"
+						"192",
+						"168",
+						"1",
+						"234"
 					],
+					"port": "1338",
 					"path": [
 						"orion",
 						"v2",
