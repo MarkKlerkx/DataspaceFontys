@@ -1,0 +1,220 @@
+{
+	"info": {
+		"_postman_id": "40608858-ec36d434-af48-41ed-a77c-c1c28cacdcd1",
+		"name": "KeyRock Admin Queries",
+		"description": "Collectie om KeyRock admin tokens te verkrijgen en gebruikersrollen binnen applicaties op te vragen.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Get KeyRock Admin Token",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"try {",
+							"    var jsonData = JSON.parse(responseBody);",
+							"    if (jsonData.access_token) {",
+							"        pm.collectionVariables.set(\"keyrock_admin_token\", jsonData.access_token);",
+							"        console.log(\"KeyRock Admin Token set: \" + jsonData.access_token);",
+							"    } else {",
+							"        console.log(\"access_token not found in KeyRock response\");",
+							"        console.log(responseBody);",
+							"    }",
+							"} catch (e) {",
+							"    console.log(\"Error parsing KeyRock response or token not found: \" + e);",
+							"    console.log(responseBody);",
+							"}"
+						],
+						"type": "text/javascript",
+						"id": "625d7e6d-81b8-495e-a596-9dd49778e790"
+					}
+				}
+			],
+			"id": "40608858-76fcee04-4c5f-43e5-8fb2-dd7db87e2e48",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/x-www-form-urlencoded"
+					}
+				],
+				"body": {
+					"mode": "urlencoded",
+					"urlencoded": [
+						{
+							"key": "grant_type",
+							"value": "password",
+							"type": "text"
+						},
+						{
+							"key": "username",
+							"value": "{{keyrock_admin_user}}",
+							"type": "text",
+							"description": "Gebruikersnaam van een KeyRock admin of gebruiker met voldoende rechten."
+						},
+						{
+							"key": "password",
+							"value": "{{keyrock_admin_password}}",
+							"type": "text",
+							"description": "Wachtwoord van de KeyRock admin gebruiker."
+						},
+						{
+							"key": "client_id",
+							"value": "{{keyrock_admin_client_id}}",
+							"type": "text",
+							"description": "Client ID van een vertrouwde applicatie in KeyRock (vaak een admin client)."
+						},
+						{
+							"key": "client_secret",
+							"value": "{{keyrock_admin_client_secret}}",
+							"type": "text",
+							"description": "Client Secret van de vertrouwde applicatie."
+						}
+					]
+				},
+				"url": {
+					"raw": "{{keyrock_url}}/oauth2/token",
+					"host": [
+						"{{keyrock_url}}"
+					],
+					"path": [
+						"oauth2",
+						"token"
+					]
+				},
+				"description": "Verkrijg een OAuth2 token voor een KeyRock admin of een gebruiker met voldoende rechten om administratieve queries uit te voeren.\nHet verkregen `access_token` wordt opgeslagen in de collection variable `keyrock_admin_token`."
+			},
+			"response": []
+		},
+		{
+			"name": "2. Get User Roles in Application",
+			"id": "40608858-5703d436-8a6a-4815-a69a-c4f629241247",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "X-Auth-Token",
+						"value": "{{keyrock_admin_token}}"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json"
+					}
+				],
+				"url": {
+					"raw": "{{keyrock_url}}/v1/users/{{user_id_to_query}}/roles?app_id={{app_id_to_query}}",
+					"host": [
+						"{{keyrock_url}}"
+					],
+					"path": [
+						"v1",
+						"users",
+						"{{user_id_to_query}}",
+						"roles"
+					],
+					"query": [
+						{
+							"key": "app_id",
+							"value": "{{app_id_to_query}}"
+						}
+					]
+				},
+				"description": "Vraagt de rollen op van een specifieke gebruiker (`user_id_to_query`) binnen een specifieke applicatie (`app_id_to_query`).\n\nVereist een geldig `keyrock_admin_token` in de `X-Auth-Token` header."
+			},
+			"response": []
+		},
+		{
+			"name": "3. List All Roles in Application",
+			"id": "40608858-2099110d-f1e4-442d-86f1-590fd61d0e40",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "X-Auth-Token",
+						"value": "{{keyrock_admin_token}}"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json"
+					}
+				],
+				"url": {
+					"raw": "{{keyrock_url}}/v1/applications/{{app_id_to_query}}/roles",
+					"host": [
+						"{{keyrock_url}}"
+					],
+					"path": [
+						"v1",
+						"applications",
+						"{{app_id_to_query}}",
+						"roles"
+					]
+				},
+				"description": "Vraagt alle rollen op die gedefinieerd zijn voor een specifieke applicatie (`app_id_to_query`).\nDe response kan per rol ook de toegewezen gebruikers bevatten.\n\nVereist een geldig `keyrock_admin_token` in de `X-Auth-Token` header."
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "keyrock_url",
+			"value": "http://localhost:3005",
+			"type": "string",
+			"description": "De basis URL van je KeyRock instantie (bv. http://keyrock:3005 of http://jouw.domein.com:3005)"
+		},
+		{
+			"key": "keyrock_admin_user",
+			"value": "admin@example.com",
+			"type": "string",
+			"description": "Gebruikersnaam van je KeyRock admin account (of een gebruiker met voldoende rechten)."
+		},
+		{
+			"key": "keyrock_admin_password",
+			"value": "your_admin_password",
+			"type": "string",
+			"description": "Wachtwoord van je KeyRock admin account."
+		},
+		{
+			"key": "keyrock_admin_client_id",
+			"value": "bijv_een_admin_app_client_id",
+			"type": "string",
+			"description": "Client ID van een applicatie in KeyRock die is geautoriseerd om tokens voor admin-taken te verkrijgen."
+		},
+		{
+			"key": "keyrock_admin_client_secret",
+			"value": "bijv_het_secret_van_de_admin_app",
+			"type": "string",
+			"description": "Client Secret van de hierboven genoemde applicatie."
+		},
+		{
+			"key": "user_id_to_query",
+			"value": "id_van_de_gebruiker",
+			"type": "string",
+			"description": "De ID van de gebruiker wiens rollen je wilt opvragen."
+		},
+		{
+			"key": "app_id_to_query",
+			"value": "b08a2f67-1872-4962-91d1-b630802e6ac1",
+			"type": "string",
+			"description": "De ID van de applicatie (bijv. de PEP_PROXY_APP_ID van Wilma)."
+		},
+		{
+			"key": "keyrock_admin_token",
+			"value": "",
+			"type": "string",
+			"description": "Wordt automatisch gevuld door de 'Get KeyRock Admin Token' request."
+		}
+	]
+}
