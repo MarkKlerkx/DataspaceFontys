@@ -102,7 +102,7 @@
 					}
 				],
 				"url": {
-					"raw": "http://192.168.1.234:1338/orion/v2/entities",
+					"raw": "http://192.168.1.234:1338/orion/v2/entities/urn:ngsi-ld:Streetlight:Madrid:001",
 					"protocol": "http",
 					"host": [
 						"192",
@@ -114,7 +114,8 @@
 					"path": [
 						"orion",
 						"v2",
-						"entities"
+						"entities",
+						"urn:ngsi-ld:Streetlight:Madrid:001"
 					],
 					"query": [
 						{
