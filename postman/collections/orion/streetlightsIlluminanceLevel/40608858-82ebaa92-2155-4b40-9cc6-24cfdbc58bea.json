@@ -32,7 +32,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\r\n    \"illuminanceLevel\": {\r\n        \"type\": \"Number\",\r\n        \"value\": 890\r\n    }\r\n}",
+					"raw": "{\r\n    \"illuminanceLevel\": {\r\n        \"type\": \"Number\",\r\n        \"value\": 904\r\n    }\r\n}",
 					"options": {
 						"raw": {
 							"language": "json"
