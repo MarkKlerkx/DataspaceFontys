@@ -171,50 +171,42 @@
 		{
 			"key": "keyrock_url",
 			"value": "http://localhost:3005",
-			"type": "string",
-			"description": "De basis URL van je KeyRock instantie (bv. http://keyrock:3005 of http://jouw.domein.com:3005)"
+			"type": "string"
 		},
 		{
 			"key": "keyrock_admin_user",
 			"value": "admin@example.com",
-			"type": "string",
-			"description": "Gebruikersnaam van je KeyRock admin account (of een gebruiker met voldoende rechten)."
+			"type": "string"
 		},
 		{
 			"key": "keyrock_admin_password",
 			"value": "your_admin_password",
-			"type": "string",
-			"description": "Wachtwoord van je KeyRock admin account."
+			"type": "string"
 		},
 		{
 			"key": "keyrock_admin_client_id",
 			"value": "bijv_een_admin_app_client_id",
-			"type": "string",
-			"description": "Client ID van een applicatie in KeyRock die is geautoriseerd om tokens voor admin-taken te verkrijgen."
+			"type": "string"
 		},
 		{
 			"key": "keyrock_admin_client_secret",
 			"value": "bijv_het_secret_van_de_admin_app",
-			"type": "string",
-			"description": "Client Secret van de hierboven genoemde applicatie."
+			"type": "string"
 		},
 		{
 			"key": "user_id_to_query",
 			"value": "id_van_de_gebruiker",
-			"type": "string",
-			"description": "De ID van de gebruiker wiens rollen je wilt opvragen."
+			"type": "string"
 		},
 		{
 			"key": "app_id_to_query",
 			"value": "b08a2f67-1872-4962-91d1-b630802e6ac1",
-			"type": "string",
-			"description": "De ID van de applicatie (bijv. de PEP_PROXY_APP_ID van Wilma)."
+			"type": "string"
 		},
 		{
 			"key": "keyrock_admin_token",
 			"value": "",
-			"type": "string",
-			"description": "Wordt automatisch gevuld door de 'Get KeyRock Admin Token' request."
+			"type": "string"
 		}
 	]
 }
