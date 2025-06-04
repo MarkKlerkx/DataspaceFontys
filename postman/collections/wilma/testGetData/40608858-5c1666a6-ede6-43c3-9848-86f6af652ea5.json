@@ -116,20 +116,6 @@
 						"v2",
 						"entities",
 						"urn:ngsi-ld:Streetlight:Madrid:001"
-					],
-					"query": [
-						{
-							"key": "type",
-							"value": "YOUR_ENTITY_TYPE",
-							"description": "(Optioneel) Filter op entity type",
-							"disabled": true
-						},
-						{
-							"key": "id",
-							"value": "YOUR_ENTITY_ID",
-							"description": "(Optioneel) Filter op specifieke entity ID",
-							"disabled": true
-						}
 					]
 				},
 				"description": "Haal data op van de Orion Context Broker via de Wilma PEP Proxy.\n\n**Vereiste headers:**\n* `X-Auth-Token`: Het access token verkregen van KeyRock (automatisch gevuld vanuit environment variable `wilma_pep_token`).\n* `Accept`: `application/json`\n\nPas de URL en query parameters aan om specifieke entities op te halen."
