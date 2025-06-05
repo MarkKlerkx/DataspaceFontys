@@ -100,10 +100,6 @@
 						"value": "{{wilma_pep_token}}"
 					},
 					{
-						"key": "Accept",
-						"value": "application/json"
-					},
-					{
 						"key": "Content-Type",
 						"value": "application/json",
 						"type": "text"
