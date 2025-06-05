@@ -105,10 +105,9 @@
 						"type": "text"
 					},
 					{
-						"key": "",
-						"value": "",
-						"type": "text",
-						"disabled": true
+						"key": "Application-Encoding",
+						"value": "apllication/gzip",
+						"type": "text"
 					}
 				],
 				"url": {
