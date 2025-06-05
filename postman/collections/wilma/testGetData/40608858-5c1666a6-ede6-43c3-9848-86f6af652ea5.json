@@ -97,7 +97,7 @@
 				"header": [
 					{
 						"key": "X-Auth-Token",
-						"value": "{{wilma_pep_token}}"
+						"value": "65c24009ff5a20be40b60859b1c8b00af3434875"
 					},
 					{
 						"key": "Content-Type",
