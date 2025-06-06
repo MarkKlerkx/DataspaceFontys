@@ -99,6 +99,16 @@
 				"disableBodyPruning": true
 			},
 			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "298b8f49ebf256a27bb017205e67f4fb0d0b9060",
+							"type": "string"
+						}
+					]
+				},
 				"method": "GET",
 				"header": [
 					{
