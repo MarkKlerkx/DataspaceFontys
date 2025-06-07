@@ -105,14 +105,15 @@
 							"raw": "{\n    \"@context\": \"https://smart-data-models.github.io/dataModel.Streetlighting/context.jsonld\",\n    \"actionType\": \"append\",\n    \"entities\": [\n        {\n            \"id\": \"urn:ngsi-ld:Streetlight:Madrid:002\",\n            \"type\": \"Streetlight\",\n            \"location\": {\n                \"type\": \"geo:json\",\n                \"value\": {\"type\": \"Point\", \"coordinates\": [-3.703700, 40.416700]}\n            },\n            \"status\": {\"type\": \"Text\", \"value\": \"working\"}\n        },\n        {\n            \"id\": \"urn:ngsi-ld:Streetlight:Madrid:003\",\n            \"type\": \"Streetlight\",\n            \"location\": {\n                \"type\": \"geo:json\",\n                \"value\": {\"type\": \"Point\", \"coordinates\": [-3.703600, 40.416600]}\n            },\n            \"status\": {\"type\": \"Text\", \"value\": \"maintenance\"}\n        }\n    ]\n}"
 						},
 						"url": {
-							"raw": "http://{{orion_host}}:1026/v2/op/update",
+							"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/op/update",
 							"protocol": "http",
 							"host": [
 								"{{orion_host}}"
 							],
 							"port": "1026",
 							"path": [
-								"v2",
+								"ngsi-ld",
+								"v1",
 								"op",
 								"update"
 							]
