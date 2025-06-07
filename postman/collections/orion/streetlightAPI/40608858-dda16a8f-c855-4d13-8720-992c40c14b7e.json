@@ -217,7 +217,7 @@
 							}
 						],
 						"url": {
-							"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entities?type=Streetlight&q=status==\"broken\"",
+							"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entities?type=Streetlight&q=status==\"address\"",
 							"protocol": "http",
 							"host": [
 								"{{orion_host}}"
@@ -235,7 +235,7 @@
 								},
 								{
 									"key": "q",
-									"value": "status==\"broken\""
+									"value": "status==\"address\""
 								}
 							]
 						},
