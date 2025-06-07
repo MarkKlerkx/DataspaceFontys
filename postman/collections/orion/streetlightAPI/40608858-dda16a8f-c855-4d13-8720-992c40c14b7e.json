@@ -65,7 +65,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"@context\": \"https://smart-data-models.github.io/dataModel.Streetlighting/context.jsonld\",\n    \"illuminance\": {\n        \"type\": \"Property\",\n        \"value\": 790,\n        \"unitCode\": \"LX\"\n    }\n}"
+							"raw": "{\n    \"@context\": \"https://smart-data-models.github.io/dataModel.Streetlighting/context.jsonld\",\n    \"illuminance\": {\n        \"type\": \"Property\",\n        \"value\": 60,\n        \"unitCode\": \"LX\"\n    }\n}"
 						},
 						"url": {
 							"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entities/{{streetlight_id_example}}",
