@@ -21,16 +21,11 @@
 							{
 								"key": "Content-Type",
 								"value": "application/ld+json"
-							},
-							{
-								"key": "NGSILD-Tenant",
-								"value": "fiware",
-								"disabled": true
 							}
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"@context\": \"https://smart-data-models.github.io/dataModel.Streetlighting/context.jsonld\",\n    \"id\": \"urn:ngsi-ld:Streetlight:Helmond-Kasteel-002\",\n    \"type\": \"Streetlight\",\n    \"location\": {\n        \"type\": \"GeoProperty\",\n        \"value\": {\n            \"type\": \"Point\",\n            \"coordinates\": [\n                6.662,\n                51.480\n            ]\n        }\n    },\n    \"powerState\": {\n        \"type\": \"Property\",\n        \"value\": \"on\"\n    },\n    \"address\": {\n        \"type\": \"Property\",\n        \"value\": {\n            \"streetAddress\": \"Kasteel-Traverse\",\n            \"addressLocality\": \"Helmond\",\n            \"addressRegion\": \"Noord-Brabant\",\n            \"addressCountry\": \"NL\",\n            \"postalCode\": \"5701NR\"\n        }\n    },\n    \"dateInstalled\": {\n        \"type\": \"Property\",\n        \"value\": {\n            \"@type\": \"DateTime\",\n            \"@value\": \"2022-10-26T21:32:52Z\"\n        }\n    },\n    \"controlledAsset\": {\n        \"type\": \"Relationship\",\n        \"object\": \"urn:ngsi-ld:LightController:controller-A-456\"\n    }\n}",
+							"raw": "{\n    \"@context\": \"https://smart-data-models.github.io/dataModel.Streetlighting/context.jsonld\",\n    \"id\": \"urn:ngsi-ld:Streetlight:Helmond-Kasteel-004\",\n    \"type\": \"Streetlight\",\n    \"location\": {\n        \"type\": \"GeoProperty\",\n        \"value\": {\n            \"type\": \"Point\",\n            \"coordinates\": [\n                8.662,\n                51.490\n            ]\n        }\n    },\n    \"powerState\": {\n        \"type\": \"Property\",\n        \"value\": \"on\"\n    },\n    \"address\": {\n        \"type\": \"Property\",\n        \"value\": {\n            \"streetAddress\": \"Kasteel-Traverse\",\n            \"addressLocality\": \"Helmond\",\n            \"addressRegion\": \"Noord-Brabant\",\n            \"addressCountry\": \"NL\",\n            \"postalCode\": \"5701NR\"\n        }\n    },\n    \"dateInstalled\": {\n        \"type\": \"Property\",\n        \"value\": {\n            \"@type\": \"DateTime\",\n            \"@value\": \"2022-10-26T21:32:52Z\"\n        }\n    },\n    \"controlledAsset\": {\n        \"type\": \"Relationship\",\n        \"object\": \"urn:ngsi-ld:LightController:controller-A-456\"\n    }\n}",
 							"options": {
 								"raw": {
 									"language": "text"
