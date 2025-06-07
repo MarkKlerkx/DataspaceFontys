@@ -23,7 +23,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"description\": \"Notify legacy QuantumLeap of ALL Streetlight changes (NGSI-v2 format)\",\n    \"subject\": {\n        \"entities\": [\n            {\n                \"idPattern\": \".*\",\n                \"type\": \"Streetlight\"\n            }\n        ]\n    },\n    \"notification\": {\n        \"http\": {\n            \"url\": \"http://quantumleap:8668/v2/notify\"\n        },\n        \"attrsFormat\": \"normalized\"\n    }\n}"
+					"raw": "{\n    \"@context\": \"https://smart-data-models.github.io/dataModel.Streetlighting/context.jsonld\",\n    \"description\": \"Notify legacy QuantumLeap of ALL Streetlight changes (NGSI-v2 format)\",\n    \"subject\": {\n        \"entities\": [\n            {\n                \"idPattern\": \".*\",\n                \"type\": \"Streetlight\"\n            }\n        ]\n    },\n    \"notification\": {\n        \"http\": {\n            \"url\": \"http://quantumleap:8668/v2/notify\"\n        },\n        \"attrsFormat\": \"normalized\"\n    }\n}"
 				},
 				"url": {
 					"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/subscriptions",
