@@ -60,7 +60,7 @@
 						"header": [
 							{
 								"key": "Content-Type",
-								"value": "application/json"
+								"value": "application/ld+json"
 							}
 						],
 						"body": {
