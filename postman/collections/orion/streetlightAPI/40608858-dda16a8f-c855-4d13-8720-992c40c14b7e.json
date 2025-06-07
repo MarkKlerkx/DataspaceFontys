@@ -97,15 +97,7 @@
 						"header": [
 							{
 								"key": "Content-Type",
-								"value": "application/json"
-							},
-							{
-								"key": "Fiware-Service",
-								"value": "fiware"
-							},
-							{
-								"key": "Fiware-ServicePath",
-								"value": "/iot"
+								"value": "application/ld+json"
 							}
 						],
 						"body": {
