@@ -23,7 +23,7 @@
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"description\": \"Hybrid Subscription: LD request, v2 notification\",\n    \"type\": \"Subscription\",\n    \"entities\": [\n        {\n            \"type\": \"Streetlight\"\n        }\n    ],\n    \"notification\": {\n        \"format\": \"normalized\",\n        \"endpoint\": {\n            \"uri\": \"http://quantumleap:8668/v2/notify\",\n            \"accept\": \"application/json\"\n        }\n    }\n}"
+					"raw": "{\n    \"@context\": \"https://smart-data-models.github.io/dataModel.Streetlighting/context.jsonld\",\n    \"description\": \"Hybrid Subscription: LD request, v2 notification\",\n    \"type\": \"Subscription\",\n    \"entities\": [\n        {\n            \"type\": \"Streetlight\"\n        }\n    ],\n    \"notification\": {\n        \"format\": \"normalized\",\n        \"endpoint\": {\n            \"uri\": \"http://quantumleap:8668/v2/notify\",\n            \"accept\": \"application/json\"\n        }\n    }\n}"
 				},
 				"url": {
 					"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/subscriptions",
