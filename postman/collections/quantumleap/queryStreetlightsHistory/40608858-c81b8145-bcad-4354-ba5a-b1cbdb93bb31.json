@@ -32,14 +32,15 @@
 					}
 				],
 				"url": {
-					"raw": "http://{{ql_host}}:{{ql_port}}/v2/entities/{{streetlight_id_example}}/attrs/illuminanceLevel?lastN=10",
+					"raw": "http://{{ql_host}}:{{ql_port}}/ngsi-ld/v1/entities/{{streetlight_id_example}}/attrs/illuminanceLevel?lastN=10",
 					"protocol": "http",
 					"host": [
 						"{{ql_host}}"
 					],
 					"port": "{{ql_port}}",
 					"path": [
-						"v2",
+						"ngsi-ld",
+						"v1",
 						"entities",
 						"{{streetlight_id_example}}",
 						"attrs",
