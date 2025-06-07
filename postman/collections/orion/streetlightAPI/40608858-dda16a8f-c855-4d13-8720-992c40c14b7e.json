@@ -99,7 +99,7 @@
 						"disableBodyPruning": true
 					},
 					"request": {
-						"method": "PATCH",
+						"method": "GET",
 						"header": [
 							{
 								"key": "Accept",
@@ -107,7 +107,7 @@
 							}
 						],
 						"url": {
-							"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entities",
+							"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entities/{{streetlight_id_example}}",
 							"protocol": "http",
 							"host": [
 								"{{orion_host}}"
@@ -116,7 +116,8 @@
 							"path": [
 								"ngsi-ld",
 								"v1",
-								"entities"
+								"entities",
+								"{{streetlight_id_example}}"
 							]
 						},
 						"description": "Haalt een specifieke Streetlight entiteit op basis van ID."
