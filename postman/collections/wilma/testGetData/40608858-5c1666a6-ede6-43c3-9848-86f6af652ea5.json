@@ -133,7 +133,7 @@
 			"response": []
 		},
 		{
-			"name": "2. Get Data from Orion via Wilma Copy",
+			"name": "2. Get Streetlight Data from Orion via Wilma",
 			"id": "40608858-013c6cac-0e1a-4d68-8c8a-dca440ef3830",
 			"protocolProfileBehavior": {
 				"disableBodyPruning": true
