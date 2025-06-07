@@ -100,23 +100,13 @@
 						"value": "{{wilma_pep_token}}"
 					},
 					{
-						"key": "Fiware-Service",
-						"value": "fiware",
-						"type": "text"
-					},
-					{
-						"key": "Fiware-ServicePath",
-						"value": "/iot",
-						"type": "text"
-					},
-					{
 						"key": "Accept",
 						"value": "application/json",
 						"type": "text"
 					}
 				],
 				"url": {
-					"raw": "http://192.168.1.234:3103/v2/entities/{{streetlight_id_example}}/attrs/illuminanceLevel?lastN=10",
+					"raw": "http://192.168.1.234:3103/v2/entities/{{streetlight_id_example}}",
 					"protocol": "http",
 					"host": [
 						"192",
@@ -128,15 +118,7 @@
 					"path": [
 						"v2",
 						"entities",
-						"{{streetlight_id_example}}",
-						"attrs",
-						"illuminanceLevel"
-					],
-					"query": [
-						{
-							"key": "lastN",
-							"value": "10"
-						}
+						"{{streetlight_id_example}}"
 					]
 				},
 				"description": "Haal data op van de Orion Context Broker via de Wilma PEP Proxy.\n\n**Vereiste headers:**\n* `X-Auth-Token`: Het access token verkregen van KeyRock (automatisch gevuld vanuit environment variable `wilma_pep_token`).\n* `Accept`: `application/json`\n\nPas de URL en query parameters aan om specifieke entities op te halen."
