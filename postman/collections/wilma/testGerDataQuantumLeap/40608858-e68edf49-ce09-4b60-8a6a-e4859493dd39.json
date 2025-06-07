@@ -106,7 +106,7 @@
 					}
 				],
 				"url": {
-					"raw": "http://192.168.1.234:3103/v2/entities/{{streetlight_id_example}}/attrs/illuminanceLevel?lastN=10",
+					"raw": "http://192.168.1.234:3103/v2/entities/{{streetlight_id_example}}/attrs/illuminanceLevel?lastN=5",
 					"protocol": "http",
 					"host": [
 						"192",
@@ -125,7 +125,7 @@
 					"query": [
 						{
 							"key": "lastN",
-							"value": "10"
+							"value": "5"
 						}
 					]
 				},
