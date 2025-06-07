@@ -106,7 +106,7 @@
 					}
 				],
 				"url": {
-					"raw": "http://192.168.1.234:3103/v2/entities/{{streetlight_id_example}}",
+					"raw": "http://192.168.1.234:3103/v2/entities/{{streetlight_id_example}}/attrs/illuminance?lastN=10",
 					"protocol": "http",
 					"host": [
 						"192",
@@ -118,7 +118,15 @@
 					"path": [
 						"v2",
 						"entities",
-						"{{streetlight_id_example}}"
+						"{{streetlight_id_example}}",
+						"attrs",
+						"illuminance"
+					],
+					"query": [
+						{
+							"key": "lastN",
+							"value": "10"
+						}
 					]
 				},
 				"description": "Haal data op van de Orion Context Broker via de Wilma PEP Proxy.\n\n**Vereiste headers:**\n* `X-Auth-Token`: Het access token verkregen van KeyRock (automatisch gevuld vanuit environment variable `wilma_pep_token`).\n* `Accept`: `application/json`\n\nPas de URL en query parameters aan om specifieke entities op te halen."
