@@ -22,14 +22,15 @@
 					}
 				],
 				"url": {
-					"raw": "http://{{orion_host}}:1026/v2/entities?type=Streetlight",
+					"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entities?type=Streetlight",
 					"protocol": "http",
 					"host": [
 						"{{orion_host}}"
 					],
 					"port": "1026",
 					"path": [
-						"v2",
+						"ngsi-ld",
+						"v1",
 						"entities"
 					],
 					"query": [
