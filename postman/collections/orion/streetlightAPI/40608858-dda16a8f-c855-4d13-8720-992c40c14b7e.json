@@ -107,7 +107,7 @@
 							}
 						],
 						"url": {
-							"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entities/{{streetlight_id_example}}/attrs",
+							"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entities/{{streetlight_id_example}}",
 							"protocol": "http",
 							"host": [
 								"{{orion_host}}"
@@ -117,8 +117,7 @@
 								"ngsi-ld",
 								"v1",
 								"entities",
-								"{{streetlight_id_example}}",
-								"attrs"
+								"{{streetlight_id_example}}"
 							]
 						},
 						"description": "Haalt een specifieke Streetlight entiteit op basis van ID."
