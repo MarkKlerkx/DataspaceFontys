@@ -6,7 +6,7 @@
 	},
 	"item": [
 		{
-			"name": "1. Get Token from KeyRock via Wilma",
+			"name": "1. Get Token from KeyRock via Wilma for Orion",
 			"event": [
 				{
 					"listen": "test",
