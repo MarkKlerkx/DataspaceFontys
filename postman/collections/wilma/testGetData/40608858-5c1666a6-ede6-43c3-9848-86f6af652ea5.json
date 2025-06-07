@@ -100,23 +100,13 @@
 						"value": "{{wilma_pep_token}}"
 					},
 					{
-						"key": "Fiware-Service",
-						"value": "fiware",
-						"type": "text"
-					},
-					{
-						"key": "Fiware-ServicePath",
-						"value": "/iot",
-						"type": "text"
-					},
-					{
 						"key": "Accept",
-						"value": "application/json",
+						"value": "application/ld+json",
 						"type": "text"
 					}
 				],
 				"url": {
-					"raw": "http://192.168.1.234:3003/v2/entities?type=Streetlight",
+					"raw": "http://192.168.1.234:3003/ngsi-ld/v1/entities/{{streetlight_id_example}}?attrs=illuminance",
 					"protocol": "http",
 					"host": [
 						"192",
@@ -126,14 +116,59 @@
 					],
 					"port": "3003",
 					"path": [
-						"v2",
-						"entities"
+						"ngsi-ld",
+						"v1",
+						"entities",
+						"{{streetlight_id_example}}"
 					],
 					"query": [
 						{
-							"key": "type",
-							"value": "Streetlight"
+							"key": "attrs",
+							"value": "illuminance"
 						}
+					]
+				},
+				"description": "Haal data op van de Orion Context Broker via de Wilma PEP Proxy.\n\n**Vereiste headers:**\n* `X-Auth-Token`: Het access token verkregen van KeyRock (automatisch gevuld vanuit environment variable `wilma_pep_token`).\n* `Accept`: `application/json`\n\nPas de URL en query parameters aan om specifieke entities op te halen."
+			},
+			"response": []
+		},
+		{
+			"name": "2. Get Streetlight Data from Orion via Wilma",
+			"id": "40608858-013c6cac-0e1a-4d68-8c8a-dca440ef3830",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [
+					{
+						"key": "X-Auth-Token",
+						"value": "{{wilma_pep_token}}"
+					},
+					{
+						"key": "Accept",
+						"value": "application/ld+json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://192.168.1.234:3003/ngsi-ld/v1/entities/{{streetlight_id_example}}",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"1",
+						"234"
+					],
+					"port": "3003",
+					"path": [
+						"ngsi-ld",
+						"v1",
+						"entities",
+						"{{streetlight_id_example}}"
 					]
 				},
 				"description": "Haal data op van de Orion Context Broker via de Wilma PEP Proxy.\n\n**Vereiste headers:**\n* `X-Auth-Token`: Het access token verkregen van KeyRock (automatisch gevuld vanuit environment variable `wilma_pep_token`).\n* `Accept`: `application/json`\n\nPas de URL en query parameters aan om specifieke entities op te halen."

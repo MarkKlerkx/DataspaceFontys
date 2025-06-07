@@ -17,33 +17,24 @@
 				"header": [
 					{
 						"key": "Content-Type",
-						"value": "application/json",
-						"type": "text"
-					},
-					{
-						"key": "Fiware-Service",
-						"value": "fiware",
-						"type": "text"
-					},
-					{
-						"key": "Fiware-ServicePath",
-						"value": "/iot",
+						"value": "application/ld+json",
 						"type": "text"
 					}
 				],
 				"body": {
 					"mode": "raw",
-					"raw": "{\n    \"description\": \"Notify QuantumLeap of Streetlight illuminanceLevel changes\",\n    \"subject\": {\n        \"entities\": [\n            {\n                \"idPattern\": \".*\",\n                \"type\": \"Streetlight\"\n            }\n        ],\n        \"condition\": {\n            \"attrs\": [\n                \"illuminanceLevel\"\n            ]\n        }\n    },\n    \"notification\": {\n        \"http\": {\n            \"url\": \"http://quantumleap:8668/v2/notify\"\n        },\n        \"attrs\": [\n            \"illuminanceLevel\"\n        ],\n        \"attrsFormat\": \"normalized\"\n    },\n    \"throttling\": 1\n}"
+					"raw": "{\n    \"@context\": \"https://smart-data-models.github.io/dataModel.Streetlighting/context.jsonld\",\n    \"description\": \"Notify QuantumLeap of Streetlight illuminanceLevel changes\",\n    \"type\": \"Subscription\",\n    \"entities\": [\n        {\n            \"type\": \"Streetlight\"\n        }\n    ],\n    \"watchedAttributes\": [\n        \"illuminance\"\n    ],\n    \"notification\": {\n        \"attributes\": [\n            \"illuminance\"\n        ],\n        \"format\": \"keyValues\",\n        \"endpoint\": {\n            \"uri\": \"http://quantumleap:8668/ngsi-ld/v1/notify\",\n            \"accept\": \"application/json\"\n        }\n    },\n    \"throttling\": 1\n}"
 				},
 				"url": {
-					"raw": "http://{{orion_host}}:1026/v2/subscriptions",
+					"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/subscriptions",
 					"protocol": "http",
 					"host": [
 						"{{orion_host}}"
 					],
 					"port": "1026",
 					"path": [
-						"v2",
+						"ngsi-ld",
+						"v1",
 						"subscriptions"
 					]
 				},

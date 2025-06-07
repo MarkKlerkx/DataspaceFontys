@@ -20,30 +20,28 @@
 						"header": [
 							{
 								"key": "Content-Type",
-								"value": "application/json"
-							},
-							{
-								"key": "Fiware-Service",
-								"value": "fiware"
-							},
-							{
-								"key": "Fiware-ServicePath",
-								"value": "/iot"
+								"value": "application/ld+json"
 							}
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"id\": \"{{streetlight_id_example}}\",\n    \"type\": \"Streetlight\",\n    \"address\": {\n        \"type\": \"PostalAddress\",\n        \"value\": {\n            \"streetAddress\": \"Calle Preciados\",\n            \"addressLocality\": \"Madrid\",\n            \"addressCountry\": \"ES\"\n        },\n        \"metadata\": {}\n    },\n    \"location\": {\n        \"type\": \"geo:json\",\n        \"value\": {\n            \"type\": \"Point\",\n            \"coordinates\": [-3.703790, 40.416775]\n        }\n    },\n    \"areaServed\": {\n        \"type\": \"Text\",\n        \"value\": \"Zona Comercial Central\"\n    },\n    \"status\": {\n        \"type\": \"Text\",\n        \"value\": \"working\"\n    },\n    \"powerState\": {\n        \"type\": \"Text\",\n        \"value\": \"on\"\n    },\n    \"controllingMethod\": {\n        \"type\": \"Text\",\n        \"value\": \"automatic\"\n    },\n    \"dateLastLampChange\": {\n        \"type\": \"DateTime\",\n        \"value\": \"2024-05-15T10:00:00Z\"\n    },\n    \"illuminanceLevel\": {\n        \"type\": \"Number\",\n        \"value\": 70\n    }\n}"
+							"raw": "{\n    \"@context\": \"https://smart-data-models.github.io/dataModel.Streetlighting/context.jsonld\",\n    \"id\": \"urn:ngsi-ld:Streetlight:Helmond-Kasteel-008\",\n    \"type\": \"Streetlight\",\n    \"location\": {\n        \"type\": \"GeoProperty\",\n        \"value\": {\n            \"type\": \"Point\",\n            \"coordinates\": [\n                8.662,\n                51.490\n            ]\n        }\n    },\n    \"illuminance\": {\n        \"type\": \"Property\",\n        \"value\": 800,\n        \"unitCode\": \"LX\"\n    },\n    \"powerState\": {\n        \"type\": \"Property\",\n        \"value\": \"on\"\n    },\n    \"address\": {\n        \"type\": \"Property\",\n        \"value\": {\n            \"streetAddress\": \"Kasteel-Traverse\",\n            \"addressLocality\": \"Helmond\",\n            \"addressRegion\": \"Noord-Brabant\",\n            \"addressCountry\": \"NL\",\n            \"postalCode\": \"5701NR\"\n        }\n    },\n    \"dateInstalled\": {\n        \"type\": \"Property\",\n        \"value\": {\n            \"@type\": \"DateTime\",\n            \"@value\": \"2022-10-26T21:32:52Z\"\n        }\n    },\n    \"controlledAsset\": {\n        \"type\": \"Relationship\",\n        \"object\": \"urn:ngsi-ld:LightController:controller-A-456\"\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "text"
+								}
+							}
 						},
 						"url": {
-							"raw": "http://{{orion_host}}:1026/v2/entities",
+							"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entities",
 							"protocol": "http",
 							"host": [
 								"{{orion_host}}"
 							],
 							"port": "1026",
 							"path": [
-								"v2",
+								"ngsi-ld",
+								"v1",
 								"entities"
 							]
 						},
@@ -62,79 +60,28 @@
 						"header": [
 							{
 								"key": "Content-Type",
-								"value": "application/json"
-							},
-							{
-								"key": "Fiware-Service",
-								"value": "fiware"
-							},
-							{
-								"key": "Fiware-ServicePath",
-								"value": "/iot"
+								"value": "application/ld+json"
 							}
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"status\": {\n        \"type\": \"Text\",\n        \"value\": \"broken\"\n    },\n    \"powerState\": {\n        \"type\": \"Text\",\n        \"value\": \"off\"\n    }\n}"
+							"raw": "{\n    \"@context\": \"https://smart-data-models.github.io/dataModel.Streetlighting/context.jsonld\",\n    \"illuminance\": {\n        \"type\": \"Property\",\n        \"value\": 790,\n        \"unitCode\": \"LX\"\n    }\n}"
 						},
 						"url": {
-							"raw": "http://{{orion_host}}:1026/v2/entities/{{streetlight_id_example}}/attrs",
+							"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entities/{{streetlight_id_example}}",
 							"protocol": "http",
 							"host": [
 								"{{orion_host}}"
 							],
 							"port": "1026",
 							"path": [
-								"v2",
+								"ngsi-ld",
+								"v1",
 								"entities",
-								"{{streetlight_id_example}}",
-								"attrs"
+								"{{streetlight_id_example}}"
 							]
 						},
 						"description": "Werkt specifieke attributen van een bestaande Streetlight bij."
-					},
-					"response": []
-				},
-				{
-					"name": "Batch Import/Update Streetlights",
-					"id": "40608858-4444935e-49a9-4060-be4f-567a07bd7ac5",
-					"protocolProfileBehavior": {
-						"disableBodyPruning": true
-					},
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							},
-							{
-								"key": "Fiware-Service",
-								"value": "fiware"
-							},
-							{
-								"key": "Fiware-ServicePath",
-								"value": "/iot"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"actionType\": \"append\",\n    \"entities\": [\n        {\n            \"id\": \"urn:ngsi-ld:Streetlight:Madrid:002\",\n            \"type\": \"Streetlight\",\n            \"location\": {\n                \"type\": \"geo:json\",\n                \"value\": {\"type\": \"Point\", \"coordinates\": [-3.703700, 40.416700]}\n            },\n            \"status\": {\"type\": \"Text\", \"value\": \"working\"}\n        },\n        {\n            \"id\": \"urn:ngsi-ld:Streetlight:Madrid:003\",\n            \"type\": \"Streetlight\",\n            \"location\": {\n                \"type\": \"geo:json\",\n                \"value\": {\"type\": \"Point\", \"coordinates\": [-3.703600, 40.416600]}\n            },\n            \"status\": {\"type\": \"Text\", \"value\": \"maintenance\"}\n        }\n    ]\n}"
-						},
-						"url": {
-							"raw": "http://{{orion_host}}:1026/v2/op/update",
-							"protocol": "http",
-							"host": [
-								"{{orion_host}}"
-							],
-							"port": "1026",
-							"path": [
-								"v2",
-								"op",
-								"update"
-							]
-						},
-						"description": "Importeert of werkt meerdere Streetlight entiteiten in batch bij."
 					},
 					"response": []
 				}
@@ -155,26 +102,19 @@
 						"header": [
 							{
 								"key": "Accept",
-								"value": "application/json"
-							},
-							{
-								"key": "Fiware-Service",
-								"value": "fiware"
-							},
-							{
-								"key": "Fiware-ServicePath",
-								"value": "/iot"
+								"value": "application/ld+json"
 							}
 						],
 						"url": {
-							"raw": "http://{{orion_host}}:1026/v2/entities/{{streetlight_id_example}}",
+							"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entities/{{streetlight_id_example}}",
 							"protocol": "http",
 							"host": [
 								"{{orion_host}}"
 							],
 							"port": "1026",
 							"path": [
-								"v2",
+								"ngsi-ld",
+								"v1",
 								"entities",
 								"{{streetlight_id_example}}"
 							]
@@ -184,8 +124,8 @@
 					"response": []
 				},
 				{
-					"name": "Alle Streetlights Ophalen (op type)",
-					"id": "40608858-0e38bcc1-67ec-43f4-88fb-da47ae0533b8",
+					"name": "Illuminance Specifieke Streetlight Ophalen",
+					"id": "40608858-a74ff4ca-3fdd-4be3-a557-2076abcaa33b",
 					"protocolProfileBehavior": {
 						"disableBodyPruning": true
 					},
@@ -194,180 +134,30 @@
 						"header": [
 							{
 								"key": "Accept",
-								"value": "application/json"
-							},
-							{
-								"key": "Fiware-Service",
-								"value": "fiware"
-							},
-							{
-								"key": "Fiware-ServicePath",
-								"value": "/iot"
+								"value": "application/ld+json"
 							}
 						],
 						"url": {
-							"raw": "http://{{orion_host}}:1026/v2/entities?type=Streetlight",
+							"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entities/{{streetlight_id_example}}?attrs=illuminance",
 							"protocol": "http",
 							"host": [
 								"{{orion_host}}"
 							],
 							"port": "1026",
 							"path": [
-								"v2",
-								"entities"
+								"ngsi-ld",
+								"v1",
+								"entities",
+								"{{streetlight_id_example}}"
 							],
 							"query": [
-								{
-									"key": "type",
-									"value": "Streetlight"
-								}
-							]
-						},
-						"description": "Haalt alle entiteiten van het type Streetlight op."
-					},
-					"response": []
-				},
-				{
-					"name": "Alle Streetlights Ophalen (keyValues)",
-					"id": "40608858-1ad77fd7-0666-499d-9b04-a51431df18db",
-					"protocolProfileBehavior": {
-						"disableBodyPruning": true
-					},
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Accept",
-								"value": "application/json"
-							},
-							{
-								"key": "Fiware-Service",
-								"value": "fiware"
-							},
-							{
-								"key": "Fiware-ServicePath",
-								"value": "/iot"
-							}
-						],
-						"url": {
-							"raw": "http://{{orion_host}}:1026/v2/entities?type=Streetlight&options=keyValues",
-							"protocol": "http",
-							"host": [
-								"{{orion_host}}"
-							],
-							"port": "1026",
-							"path": [
-								"v2",
-								"entities"
-							],
-							"query": [
-								{
-									"key": "type",
-									"value": "Streetlight"
-								},
-								{
-									"key": "options",
-									"value": "keyValues"
-								}
-							]
-						},
-						"description": "Haalt alle Streetlights op in een vereenvoudigde key-value representatie."
-					},
-					"response": []
-				},
-				{
-					"name": "Streetlights Filteren (op status 'broken')",
-					"id": "40608858-6c48512b-b67f-421a-b944-3494fe0737b3",
-					"protocolProfileBehavior": {
-						"disableBodyPruning": true
-					},
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Accept",
-								"value": "application/json"
-							},
-							{
-								"key": "Fiware-Service",
-								"value": "fiware"
-							},
-							{
-								"key": "Fiware-ServicePath",
-								"value": "/iot"
-							}
-						],
-						"url": {
-							"raw": "http://{{orion_host}}:1026/v2/entities?type=Streetlight&q=status==\"broken\"",
-							"protocol": "http",
-							"host": [
-								"{{orion_host}}"
-							],
-							"port": "1026",
-							"path": [
-								"v2",
-								"entities"
-							],
-							"query": [
-								{
-									"key": "type",
-									"value": "Streetlight"
-								},
-								{
-									"key": "q",
-									"value": "status==\"broken\""
-								}
-							]
-						},
-						"description": "Haalt Streetlights op die de status 'broken' hebben."
-					},
-					"response": []
-				},
-				{
-					"name": "Streetlights Filteren (specifieke attributen)",
-					"id": "40608858-2ee6894d-cb54-45f1-8ef7-176b314b9003",
-					"protocolProfileBehavior": {
-						"disableBodyPruning": true
-					},
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Accept",
-								"value": "application/json"
-							},
-							{
-								"key": "Fiware-Service",
-								"value": "fiware"
-							},
-							{
-								"key": "Fiware-ServicePath",
-								"value": "/iot"
-							}
-						],
-						"url": {
-							"raw": "http://{{orion_host}}:1026/v2/entities?type=Streetlight&attrs=status,powerState,location",
-							"protocol": "http",
-							"host": [
-								"{{orion_host}}"
-							],
-							"port": "1026",
-							"path": [
-								"v2",
-								"entities"
-							],
-							"query": [
-								{
-									"key": "type",
-									"value": "Streetlight"
-								},
 								{
 									"key": "attrs",
-									"value": "status,powerState,location"
+									"value": "illuminance"
 								}
 							]
 						},
-						"description": "Haalt Streetlights op en toont alleen de opgegeven attributen."
+						"description": "Haalt een specifieke Streetlight entiteit op basis van ID."
 					},
 					"response": []
 				}
