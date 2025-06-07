@@ -122,6 +122,38 @@
 						"description": "Haalt een specifieke Streetlight entiteit op basis van ID."
 					},
 					"response": []
+				},
+				{
+					"name": "Specifieke Streetlight Ophalen Copy",
+					"id": "40608858-a74ff4ca-3fdd-4be3-a557-2076abcaa33b",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/ld+json"
+							}
+						],
+						"url": {
+							"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entities/{{streetlight_id_example}}",
+							"protocol": "http",
+							"host": [
+								"{{orion_host}}"
+							],
+							"port": "1026",
+							"path": [
+								"ngsi-ld",
+								"v1",
+								"entities",
+								"{{streetlight_id_example}}"
+							]
+						},
+						"description": "Haalt een specifieke Streetlight entiteit op basis van ID."
+					},
+					"response": []
 				}
 			],
 			"id": "40608858-8674b427-ada5-4904-aff8-334062118ad7"
