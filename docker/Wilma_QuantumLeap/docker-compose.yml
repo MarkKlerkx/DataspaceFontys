@@ -1,0 +1,22 @@
+services:
+  wilma_ql:
+    image: fiware/pep-proxy:latest
+    container_name: wilma_pep_proxy_ql
+    hostname: wilma_ql
+    networks:
+      - orion_dataspace
+    ports:
+      - "3103:3003"
+    environment:
+      - DEBUG=pep-proxy:*
+
+    volumes:
+      - "wilma_ql_home:/home"
+      - "./config.js:/opt/fiware-pep-proxy/config.js"
+
+networks:
+  orion_dataspace:
+    external: true
+
+volumes:
+  wilma_ql_home:
