@@ -9,7 +9,7 @@ services:
     ports:
       - "27017:27017" # Poort voor MongoDB, eventueel toegankelijk vanaf de host
     networks:
-      - dataspace
+      - orion_dataspace
     volumes:
       - mongo-data:/data/db # Persistentie voor MongoDB data
     restart: always
@@ -22,7 +22,7 @@ services:
     depends_on:
       - mongo-orion # Orion start pas nadat mongo-orion gestart is
     networks:
-      - dataspace
+      - orion_dataspace
     ports:
       - "1026:1026" # Standaardpoort voor Orion
     command: -dbURI mongodb://mongo-orion:27017/orion -logLevel INFO
@@ -37,7 +37,7 @@ services:
       - "4200:4200" # HTTP-poort voor CrateDB Admin UI en API
       - "5432:5432" # PostgreSQL protocol poort (optioneel)
     networks:
-      - dataspace
+      - orion_dataspace
     command: crate -Cdiscovery.type=single-node -Ccluster.name=democluster -Chttp.cors.enabled=true -Chttp.cors.allow-origin="*"
     volumes:
       - cratedb-data:/data # Persistentie voor CrateDB data
@@ -52,7 +52,7 @@ services:
       - cratedb-ql # QuantumLeap start pas nadat cratedb-ql gestart is
       - orion      # Logische afhankelijkheid; Orion moet notificaties kunnen sturen
     networks:
-      - dataspace
+      - orion_dataspace
     ports:
       - "8668:8668" # Standaardpoort voor QuantumLeap
     environment:

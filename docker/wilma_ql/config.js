@@ -3,7 +3,7 @@ console.log
 const config = {};
 
 // Used only if https is disabled
-config.pep_port = 3003;
+config.pep_port = 3103;
 
 // Set this var to undefined if you don't want the server to listen on HTTPS
 config.https = {
@@ -45,6 +45,17 @@ config.pep = {
 config.cluster = {
   type: 'manual', // 'manual' is de standaard, niet aanpassen
   number: 1
+};
+
+config.authorization = {
+  enabled: true,
+  pdp: 'authzforce', // Belangrijk: specificeer Authzforce als de PDP
+  azf: {
+    protocol: 'http',
+    host: 'authzforce',
+    port: 8080,
+    custom_policy: undefined // Start met de standaard check (HTTP-methode + pad)
+  }
 };
 
 // in seconds

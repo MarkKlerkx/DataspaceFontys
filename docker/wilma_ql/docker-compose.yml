@@ -6,7 +6,7 @@ services:
     networks:
       - orion_dataspace
     ports:
-      - "3103:3003"
+      - "3103:3103"
     environment:
       - DEBUG=pep-proxy:*
 

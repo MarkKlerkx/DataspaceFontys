@@ -47,6 +47,17 @@ config.cluster = {
   number: 1
 };
 
+config.authorization = {
+  enabled: true,
+  pdp: 'authzforce', // Belangrijk: specificeer Authzforce als de PDP
+  azf: {
+    protocol: 'http',
+    host: 'authzforce',
+    port: 8080,
+    custom_policy: undefined // Start met de standaard check (HTTP-methode + pad)
+  }
+};
+
 // in seconds
 config.cache_time = 300;
 

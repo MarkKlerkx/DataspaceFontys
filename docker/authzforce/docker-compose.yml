@@ -1,0 +1,13 @@
+services:
+  authzforce:
+    image: fiware/authzforce-ce-server:12.0.1
+    container_name: fiware-authzforce
+    hostname: authzforce
+    networks:
+      - orion_dataspace
+    ports:
+      - "8080:8080"
+
+networks:
+  orion_dataspace:
+    external: true

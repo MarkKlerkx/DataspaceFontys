@@ -1,0 +1,25 @@
+version: '3.9'
+
+services:
+  federated-catalog:
+    image: tractusx/edc-runtime-memory:latest
+    container_name: federated-catalog
+    ports:
+      - "8181:8181"
+    environment:
+      - EDC_WEB_HTTP_PORT=8181
+      - EDC_WEB_HTTP_PATH=/api/v1
+      - EDC_IDS_ID=urn:catalog:orion
+      - EDC_IDS_TITLE=Orion Catalog
+      - EDC_IDS_DESCRIPTION=Test catalog for Orion Dataspace
+    volumes:
+      - catalog-data:/app/data
+    networks:
+      - orion_dataspace
+
+volumes:
+  catalog-data:
+
+networks:
+  orion_dataspace:
+    external: true

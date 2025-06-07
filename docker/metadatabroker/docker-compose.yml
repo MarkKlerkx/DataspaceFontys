@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  broker-reverseproxy:
+    image: ids-broker-reverseproxy
+    container_name: broker-reverseproxy
+    volumes:
+      - broker_reverseproxy-data/certs:/etc/cert/
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - orion_dataspace
+    depends_on:
+      - broker-core
+    restart: unless-stopped
+
+  broker-core:
+    image: ids-broker-core
+    container_name: broker-core
+    volumes:
+      - broker_core-data/cert:/etc/cert/
+    environment:
+      - SPARQL_ENDPOINT=http://broker-fuseki:3030/connectorData
+      - ELASTICSEARCH_HOSTNAME=broker-elasticsearch
+      - SHACL_VALIDATION=true
+      - DAPS_VALIDATE_INCOMING=false # Zet op true indien DAPS gewenst is
+      - IDENTITY_JAVAKEYSTORE=/etc/cert/isstbroker-keystore.jks
+      - COMPONENT_URI=https://broker-reverseproxy/
+      - COMPONENT_CATALOGURI=https://broker-reverseproxy/connectors/
+      - JWKS_TRUSTEDHOSTS=daps.aisec.fraunhofer.de,omejdn
+    expose:
+      - "8080"
+    networks:
+      - orion_dataspace
+    depends_on:
+      - broker-fuseki
+      - broker-elasticsearch
+    restart: unless-stopped
+
+  broker-fuseki:
+    image: ids-broker-fuseki
+    container_name: broker-fuseki
+    volumes:
+      - broker_fuseki-data:/fuseki
+    expose:
+      - "3030"
+    networks:
+      - orion_dataspace
+    restart: unless-stopped
+
+  broker-elasticsearch:
+    image: elasticsearch:7.17.10
+    container_name: broker-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    volumes:
+      - broker_elasticsearch-data:/usr/share/elasticsearch/data
+    expose:
+      - "9200"
+    networks:
+      - orion_dataspace
+    restart: unless-stopped
+
+volumes:
+  broker_fuseki-data:
+  broker_elasticsearch-data:
+  broker_core-data:
+  broker_reverseproxy-data:
+
+networks:
+  orion_dataspace:
+    external: true

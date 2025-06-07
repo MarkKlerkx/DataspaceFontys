@@ -28,7 +28,7 @@ services:
     networks:
       - orion_dataspace
     ports:
-      - "3005:3005" # Voor toegang tot Keyrock UI
+      - "3005:3005"
     environment:
       - DEBUG=idm:*      
       - IDM_DB_HOST=mysql-keyrock
@@ -36,16 +36,11 @@ services:
       - IDM_DB_NAME=keyrock_db_l1
       - IDM_DB_USER=keyrock_user_l1
       - IDM_DB_PASS=keyrock_pass_l1
-      - IDM_HOST=http://localhost:3005 # Publiek bereikbare URL van Keyrock (pas aan indien nodig)
+      - IDM_HOST=http://localhost:3005
       - IDM_PORT=3005
       - IDM_ADMIN_USER=admin-l1@test.com
       - IDM_ADMIN_PASS=1234_l1
       - IDM_ADMIN_EMAIL=admin-l1@test.com
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3005/version"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
 
 volumes:
   mysql_keyrock_data:
