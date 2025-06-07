@@ -172,15 +172,7 @@
 						"header": [
 							{
 								"key": "Accept",
-								"value": "application/json"
-							},
-							{
-								"key": "Fiware-Service",
-								"value": "fiware"
-							},
-							{
-								"key": "Fiware-ServicePath",
-								"value": "/iot"
+								"value": "application/ld+json"
 							}
 						],
 						"url": {
