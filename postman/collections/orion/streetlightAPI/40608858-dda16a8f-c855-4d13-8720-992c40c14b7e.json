@@ -123,47 +123,6 @@
 						"description": "Haalt een specifieke Streetlight entiteit op basis van ID."
 					},
 					"response": []
-				},
-				{
-					"name": "Alle Streetlights Ophalen (keyValues)",
-					"id": "40608858-1ad77fd7-0666-499d-9b04-a51431df18db",
-					"protocolProfileBehavior": {
-						"disableBodyPruning": true
-					},
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Accept",
-								"value": "application/ld+json"
-							}
-						],
-						"url": {
-							"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entities?type=Streetlight&options=keyValues",
-							"protocol": "http",
-							"host": [
-								"{{orion_host}}"
-							],
-							"port": "1026",
-							"path": [
-								"ngsi-ld",
-								"v1",
-								"entities"
-							],
-							"query": [
-								{
-									"key": "type",
-									"value": "Streetlight"
-								},
-								{
-									"key": "options",
-									"value": "keyValues"
-								}
-							]
-						},
-						"description": "Haalt alle Streetlights op in een vereenvoudigde key-value representatie."
-					},
-					"response": []
 				}
 			],
 			"id": "40608858-8674b427-ada5-4904-aff8-334062118ad7"
