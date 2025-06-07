@@ -124,7 +124,7 @@
 					"response": []
 				},
 				{
-					"name": "Specifieke Streetlight Ophalen Copy",
+					"name": "Illuminance Specifieke Streetlight Ophalen",
 					"id": "40608858-a74ff4ca-3fdd-4be3-a557-2076abcaa33b",
 					"protocolProfileBehavior": {
 						"disableBodyPruning": true
