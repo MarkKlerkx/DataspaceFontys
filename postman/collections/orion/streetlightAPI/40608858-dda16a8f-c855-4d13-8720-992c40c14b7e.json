@@ -23,12 +23,8 @@
 								"value": "application/ld+json"
 							},
 							{
-								"key": "Fiware-Service",
+								"key": "NGSILD-Tenant",
 								"value": "fiware"
-							},
-							{
-								"key": "Fiware-ServicePath",
-								"value": "/iot"
 							}
 						],
 						"body": {
