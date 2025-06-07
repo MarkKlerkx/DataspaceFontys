@@ -44,12 +44,12 @@
 						},
 						{
 							"key": "username",
-							"value": "wilma.test@test.com",
+							"value": "admin-l1@test.com",
 							"type": "text"
 						},
 						{
 							"key": "password",
-							"value": "12345ABCD",
+							"value": "1234_l1",
 							"type": "text"
 						},
 						{
