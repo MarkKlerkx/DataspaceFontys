@@ -103,26 +103,19 @@
 						"header": [
 							{
 								"key": "Accept",
-								"value": "application/json"
-							},
-							{
-								"key": "Fiware-Service",
-								"value": "fiware"
-							},
-							{
-								"key": "Fiware-ServicePath",
-								"value": "/iot"
+								"value": "application/ld+json"
 							}
 						],
 						"url": {
-							"raw": "http://{{orion_host}}:1026/v2/entities/{{streetlight_id_example}}",
+							"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entities/{{streetlight_id_example}}",
 							"protocol": "http",
 							"host": [
 								"{{orion_host}}"
 							],
 							"port": "1026",
 							"path": [
-								"v2",
+								"ngsi-ld",
+								"v1",
 								"entities",
 								"{{streetlight_id_example}}"
 							]
