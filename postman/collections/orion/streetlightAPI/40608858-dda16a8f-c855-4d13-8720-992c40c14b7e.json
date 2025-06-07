@@ -68,7 +68,7 @@
 							"raw": "{\n    \"@context\": \"https://smart-data-models.github.io/dataModel.Streetlighting/context.jsonld\",\n    \"illuminance\": {\n        \"type\": \"Property\",\n        \"value\": 7600,\n        \"unitCode\": \"LX\"\n    }\n}"
 						},
 						"url": {
-							"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entities/{{streetlight_id_example}}/attrs",
+							"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entities/{{streetlight_id_example}}?attrs=illuminance",
 							"protocol": "http",
 							"host": [
 								"{{orion_host}}"
@@ -78,8 +78,13 @@
 								"ngsi-ld",
 								"v1",
 								"entities",
-								"{{streetlight_id_example}}",
-								"attrs"
+								"{{streetlight_id_example}}"
+							],
+							"query": [
+								{
+									"key": "attrs",
+									"value": "illuminance"
+								}
 							]
 						},
 						"description": "Werkt specifieke attributen van een bestaande Streetlight bij."
