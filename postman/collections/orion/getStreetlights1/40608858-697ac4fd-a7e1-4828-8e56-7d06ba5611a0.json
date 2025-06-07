@@ -22,7 +22,7 @@
 					}
 				],
 				"url": {
-					"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entities",
+					"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entities?type=Streetlight",
 					"protocol": "http",
 					"host": [
 						"{{orion_host}}"
@@ -32,6 +32,12 @@
 						"ngsi-ld",
 						"v1",
 						"entities"
+					],
+					"query": [
+						{
+							"key": "type",
+							"value": "Streetlight"
+						}
 					]
 				},
 				"description": "Haalt alle entiteiten van het type Streetlight op om te controleren welke ID's bestaan."
