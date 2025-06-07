@@ -99,7 +99,7 @@
 						"disableBodyPruning": true
 					},
 					"request": {
-						"method": "PATCH",
+						"method": "GET",
 						"header": [
 							{
 								"key": "Accept",
