@@ -1,31 +1,29 @@
-version: '3.8'
-
 services:
+  # FIWARE Orion Context Broker
+  orion:
+    image: fiware/orion-ld:latest
+    hostname: orion
+    container_name: orion
+    depends_on:
+      - mongo-orion
+    networks:
+      - orion_dataspace
+    ports:
+      - "1026:1026" # Standaardpoort voor Orion
+    command: -dbhost mongo-orion -logLevel DEBUG -forwarding -mongocOnly
+    restart: always
+
   # MongoDB voor Orion Context Broker
   mongo-orion:
     image: mongo:latest
     hostname: mongo-orion
     container_name: mongo-orion
     ports:
-      - "27017:27017" # Poort voor MongoDB, eventueel toegankelijk vanaf de host
+      - "27017:27017"
     networks:
       - orion_dataspace
     volumes:
-      - mongo-data:/data/db # Persistentie voor MongoDB data
-    restart: always
-
-  # FIWARE Orion Context Broker
-  orion:
-    image: fiware/orion:latest
-    hostname: orion
-    container_name: orion
-    depends_on:
-      - mongo-orion # Orion start pas nadat mongo-orion gestart is
-    networks:
-      - orion_dataspace
-    ports:
-      - "1026:1026" # Standaardpoort voor Orion
-    command: -dbURI mongodb://mongo-orion:27017/orion -logLevel INFO
+      - mongo-data:/data/db
     restart: always
 
   # CrateDB voor QuantumLeap
@@ -65,8 +63,8 @@ services:
 
 # Netwerk definitie
 networks:
-  dataspace:
-    driver: bridge
+  orion_dataspace:
+    external: true
 
 # Volume definities voor persistente data
 volumes:
