@@ -1,0 +1,176 @@
+{
+	"info": {
+		"_postman_id": "40608858-e68edf49-ce09-4b60-8a6a-e4859493dd39",
+		"name": "Wilma PEP Proxy Tests QuantumLeap",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Get Token from KeyRock via Wilma for QL",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"id": "c8fa5965-8ab3-4dcb-8717-025595e4962e",
+						"exec": [
+							"var jsonData = JSON.parse(responseBody);",
+							"pm.environment.set(\"wilma_pep_token\", jsonData.access_token);",
+							"console.log(\"Access Token: \" + jsonData.access_token);"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"id": "40608858-a8a75527-a53d-442f-9c7e-b02439665e99",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/x-www-form-urlencoded"
+					}
+				],
+				"body": {
+					"mode": "urlencoded",
+					"urlencoded": [
+						{
+							"key": "grant_type",
+							"value": "password",
+							"type": "text"
+						},
+						{
+							"key": "username",
+							"value": "wilma.test@test.com",
+							"type": "text"
+						},
+						{
+							"key": "password",
+							"value": "12345ABCD",
+							"type": "text"
+						},
+						{
+							"key": "client_id",
+							"value": "38405b50-c400-4b31-a2ae-dec946f83b78",
+							"type": "text"
+						},
+						{
+							"key": "client_secret",
+							"value": "fdb82352-dec9-486f-92d5-47a168b44dd8",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "http://192.168.1.234:3005/oauth2/token",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"1",
+						"234"
+					],
+					"port": "3005",
+					"path": [
+						"oauth2",
+						"token"
+					]
+				},
+				"description": "Verkrijg een OAuth2 token van KeyRock via de Wilma PEP Proxy. \n\n**Vereiste body parameters:**\n* `grant_type`: 'password'\n* `username`: Je KeyRock gebruikersnaam\n* `password`: Je KeyRock wachtwoord\n* `client_id`: De Client ID van je applicatie in KeyRock\n* `client_secret`: Het Client Secret van je applicatie in KeyRock\n\nDe verkregen `access_token` wordt automatisch opgeslagen in de environment variable `wilma_pep_token` voor gebruik in volgende requests."
+			},
+			"response": []
+		},
+		{
+			"name": "2. Get Data from QuantumLeap via Wilma",
+			"id": "40608858-6b1ad562-d366-40a5-94b4-5158438c8142",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [
+					{
+						"key": "X-Auth-Token",
+						"value": "{{wilma_pep_token}}"
+					},
+					{
+						"key": "Fiware-Service",
+						"value": "fiware",
+						"type": "text"
+					},
+					{
+						"key": "Fiware-ServicePath",
+						"value": "/iot",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://192.168.1.234:3103/v2/entities/{{streetlight_id_example}}/attrs/illuminanceLevel?lastN=10",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"1",
+						"234"
+					],
+					"port": "3103",
+					"path": [
+						"v2",
+						"entities",
+						"{{streetlight_id_example}}",
+						"attrs",
+						"illuminanceLevel"
+					],
+					"query": [
+						{
+							"key": "lastN",
+							"value": "10"
+						}
+					]
+				},
+				"description": "Haal data op van de Orion Context Broker via de Wilma PEP Proxy.\n\n**Vereiste headers:**\n* `X-Auth-Token`: Het access token verkregen van KeyRock (automatisch gevuld vanuit environment variable `wilma_pep_token`).\n* `Accept`: `application/json`\n\nPas de URL en query parameters aan om specifieke entities op te halen."
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				],
+				"id": "f5794284-0a9c-43f9-9ecc-82f71013f6f6"
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				],
+				"id": "520d5788-3ae4-4785-a820-81aea3232db3"
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "wilma_pep_token",
+			"value": "",
+			"type": "string"
+		}
+	]
+}
