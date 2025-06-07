@@ -125,43 +125,6 @@
 					"response": []
 				},
 				{
-					"name": "Alle Streetlights Ophalen (op type)",
-					"id": "40608858-0e38bcc1-67ec-43f4-88fb-da47ae0533b8",
-					"protocolProfileBehavior": {
-						"disableBodyPruning": true
-					},
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Accept",
-								"value": "application/ld+json"
-							}
-						],
-						"url": {
-							"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entities?type=Streetlight",
-							"protocol": "http",
-							"host": [
-								"{{orion_host}}"
-							],
-							"port": "1026",
-							"path": [
-								"ngsi-ld",
-								"v1",
-								"entities"
-							],
-							"query": [
-								{
-									"key": "type",
-									"value": "Streetlight"
-								}
-							]
-						},
-						"description": "Haalt alle entiteiten van het type Streetlight op."
-					},
-					"response": []
-				},
-				{
 					"name": "Alle Streetlights Ophalen (keyValues)",
 					"id": "40608858-1ad77fd7-0666-499d-9b04-a51431df18db",
 					"protocolProfileBehavior": {
