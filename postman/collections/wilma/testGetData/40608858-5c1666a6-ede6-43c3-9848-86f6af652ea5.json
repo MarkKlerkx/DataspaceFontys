@@ -131,6 +131,55 @@
 				"description": "Haal data op van de Orion Context Broker via de Wilma PEP Proxy.\n\n**Vereiste headers:**\n* `X-Auth-Token`: Het access token verkregen van KeyRock (automatisch gevuld vanuit environment variable `wilma_pep_token`).\n* `Accept`: `application/json`\n\nPas de URL en query parameters aan om specifieke entities op te halen."
 			},
 			"response": []
+		},
+		{
+			"name": "2. Get Data from Orion via Wilma Copy",
+			"id": "40608858-013c6cac-0e1a-4d68-8c8a-dca440ef3830",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [
+					{
+						"key": "X-Auth-Token",
+						"value": "{{wilma_pep_token}}"
+					},
+					{
+						"key": "Accept",
+						"value": "application/ld+json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://192.168.1.234:3003/ngsi-ld/v1/entities/{{streetlight_id_example}}?attrs=illuminance",
+					"protocol": "http",
+					"host": [
+						"192",
+						"168",
+						"1",
+						"234"
+					],
+					"port": "3003",
+					"path": [
+						"ngsi-ld",
+						"v1",
+						"entities",
+						"{{streetlight_id_example}}"
+					],
+					"query": [
+						{
+							"key": "attrs",
+							"value": "illuminance"
+						}
+					]
+				},
+				"description": "Haal data op van de Orion Context Broker via de Wilma PEP Proxy.\n\n**Vereiste headers:**\n* `X-Auth-Token`: Het access token verkregen van KeyRock (automatisch gevuld vanuit environment variable `wilma_pep_token`).\n* `Accept`: `application/json`\n\nPas de URL en query parameters aan om specifieke entities op te halen."
+			},
+			"response": []
 		}
 	],
 	"event": [
