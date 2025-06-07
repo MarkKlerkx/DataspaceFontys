@@ -32,7 +32,7 @@
 					}
 				],
 				"url": {
-					"raw": "http://{{ql_host}}:{{ql_port}}/ngsi-ld/v1/entities/{{streetlight_id_example}}/attrs/illuminanceLevel?lastN=10",
+					"raw": "http://{{ql_host}}:{{ql_port}}/ngsi-ld/v1/entities/{{streetlight_id_example}}",
 					"protocol": "http",
 					"host": [
 						"{{ql_host}}"
@@ -42,16 +42,7 @@
 						"ngsi-ld",
 						"v1",
 						"entities",
-						"{{streetlight_id_example}}",
-						"attrs",
-						"illuminanceLevel"
-					],
-					"query": [
-						{
-							"key": "lastN",
-							"value": "10",
-							"description": "Haal de laatste N waardes op"
-						}
+						"{{streetlight_id_example}}"
 					]
 				},
 				"description": "Haalt de laatste 10 historische waardes op van het 'illuminanceLevel' attribuut voor de opgegeven streetlight ID."
