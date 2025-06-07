@@ -17,7 +17,7 @@
 				"header": [
 					{
 						"key": "Accept",
-						"value": "application/ld+json",
+						"value": "application/json",
 						"type": "text"
 					}
 				],
