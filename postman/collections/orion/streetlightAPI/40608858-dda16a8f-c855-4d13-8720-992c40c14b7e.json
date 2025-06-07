@@ -33,17 +33,23 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"id\": \"{{streetlight_id_example}}\",\n    \"type\": \"Streetlight\",\n    \"address\": {\n        \"type\": \"PostalAddress\",\n        \"value\": {\n            \"streetAddress\": \"Calle Preciados\",\n            \"addressLocality\": \"Madrid\",\n            \"addressCountry\": \"ES\"\n        },\n        \"metadata\": {}\n    },\n    \"location\": {\n        \"type\": \"geo:json\",\n        \"value\": {\n            \"type\": \"Point\",\n            \"coordinates\": [-3.703790, 40.416775]\n        }\n    },\n    \"areaServed\": {\n        \"type\": \"Text\",\n        \"value\": \"Zona Comercial Central\"\n    },\n    \"status\": {\n        \"type\": \"Text\",\n        \"value\": \"working\"\n    },\n    \"powerState\": {\n        \"type\": \"Text\",\n        \"value\": \"on\"\n    },\n    \"controllingMethod\": {\n        \"type\": \"Text\",\n        \"value\": \"automatic\"\n    },\n    \"dateLastLampChange\": {\n        \"type\": \"DateTime\",\n        \"value\": \"2024-05-15T10:00:00Z\"\n    },\n    \"illuminanceLevel\": {\n        \"type\": \"Number\",\n        \"value\": 70\n    }\n}"
+							"raw": "{\n    \"id\": \"urn:ngsi-ld:Streetlight:Helmond-Kasteel-001\",\n    \"type\": \"Streetlight\",\n    \"location\": {\n        \"type\": \"GeoProperty\",\n        \"value\": {\n            \"type\": \"Point\",\n            \"coordinates\": [\n                5.662,\n                51.479\n            ]\n        }\n    },\n    \"powerState\": {\n        \"type\": \"Property\",\n        \"value\": \"on\"\n    },\n    \"address\": {\n        \"type\": \"Property\",\n        \"value\": {\n            \"streetAddress\": \"Kasteel-Traverse\",\n            \"addressLocality\": \"Helmond\",\n            \"addressRegion\": \"Noord-Brabant\",\n            \"addressCountry\": \"NL\",\n            \"postalCode\": \"5701NR\"\n        }\n    },\n    \"dateInstalled\": {\n        \"type\": \"Property\",\n        \"value\": {\n            \"@type\": \"DateTime\",\n            \"@value\": \"2022-10-26T21:32:52Z\"\n        }\n    },\n    \"controlledAsset\": {\n        \"type\": \"Relationship\",\n        \"object\": \"urn:ngsi-ld:LightController:controller-A-456\"\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "text"
+								}
+							}
 						},
 						"url": {
-							"raw": "http://{{orion_host}}:1026/v2/entities",
+							"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entities",
 							"protocol": "http",
 							"host": [
 								"{{orion_host}}"
 							],
 							"port": "1026",
 							"path": [
-								"v2",
+								"ngsi-ld",
+								"v1",
 								"entities"
 							]
 						},
