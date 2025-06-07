@@ -106,7 +106,7 @@
 					}
 				],
 				"url": {
-					"raw": "http://192.168.1.234:3003/ngsi-ld/v1/entities?type=Streetlight",
+					"raw": "http://192.168.1.234:3003/ngsi-ld/v1/entities/{{streetlight_id_example}}?attrs=illuminance",
 					"protocol": "http",
 					"host": [
 						"192",
@@ -118,12 +118,13 @@
 					"path": [
 						"ngsi-ld",
 						"v1",
-						"entities"
+						"entities",
+						"{{streetlight_id_example}}"
 					],
 					"query": [
 						{
-							"key": "type",
-							"value": "Streetlight"
+							"key": "attrs",
+							"value": "illuminance"
 						}
 					]
 				},
