@@ -100,23 +100,13 @@
 						"value": "{{wilma_pep_token}}"
 					},
 					{
-						"key": "Fiware-Service",
-						"value": "fiware",
-						"type": "text"
-					},
-					{
-						"key": "Fiware-ServicePath",
-						"value": "/iot",
-						"type": "text"
-					},
-					{
 						"key": "Accept",
 						"value": "application/json",
 						"type": "text"
 					}
 				],
 				"url": {
-					"raw": "http://192.168.1.234:3103/v2/entities/{{streetlight_id_example}}/attrs/illuminanceLevel?lastN=10",
+					"raw": "http://192.168.1.234:3103/v2/entities/{{streetlight_id_example}}/attrs/illuminance?lastN=10",
 					"protocol": "http",
 					"host": [
 						"192",
@@ -130,7 +120,7 @@
 						"entities",
 						"{{streetlight_id_example}}",
 						"attrs",
-						"illuminanceLevel"
+						"illuminance"
 					],
 					"query": [
 						{

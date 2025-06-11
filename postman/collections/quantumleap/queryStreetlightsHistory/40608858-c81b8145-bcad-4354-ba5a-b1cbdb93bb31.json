@@ -17,20 +17,19 @@
 				"header": [
 					{
 						"key": "Accept",
-						"value": "application/ld+json",
+						"value": "application/json",
 						"type": "text"
 					}
 				],
 				"url": {
-					"raw": "http://{{ql_host}}:{{ql_port}}/ngsi-ld/v1/entities/{{streetlight_id_example}}",
+					"raw": "http://{{ql_host}}:{{ql_port}}/v2/entities/{{streetlight_id_example}}",
 					"protocol": "http",
 					"host": [
 						"{{ql_host}}"
 					],
 					"port": "{{ql_port}}",
 					"path": [
-						"ngsi-ld",
-						"v1",
+						"v2",
 						"entities",
 						"{{streetlight_id_example}}"
 					]
