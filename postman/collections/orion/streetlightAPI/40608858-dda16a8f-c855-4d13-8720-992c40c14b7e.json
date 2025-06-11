@@ -151,7 +151,7 @@
 							}
 						],
 						"url": {
-							"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entities/{{streetlight_id_example}}?attrs=illuminance",
+							"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entities/?attrs=address&Link=<https://smart-data-models.github.io/dataModel.Streetlighting/context.jsonld>; rel=\"http://www.w3.org/ns/json-ld%23context\"; type=\"application/ld+json\"",
 							"protocol": "http",
 							"host": [
 								"{{orion_host}}"
@@ -161,12 +161,17 @@
 								"ngsi-ld",
 								"v1",
 								"entities",
-								"{{streetlight_id_example}}"
+								""
 							],
 							"query": [
 								{
 									"key": "attrs",
-									"value": "illuminance"
+									"value": "address"
+								},
+								{
+									"key": "Link",
+									"value": "<https://smart-data-models.github.io/dataModel.Streetlighting/context.jsonld>; rel=\"http://www.w3.org/ns/json-ld#context\"; type=\"application/ld+json\"",
+									"type": "text"
 								}
 							]
 						},
