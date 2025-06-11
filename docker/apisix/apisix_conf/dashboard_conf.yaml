@@ -1,0 +1,3 @@
+etcd:
+  endpoints:
+    - "http://etcd:2379"

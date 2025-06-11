@@ -43,7 +43,7 @@ services:
 
   # QuantumLeap API
   quantumleap:
-    image: fiware/quantum-leap:latest
+    image: orchestracities/quantumleap:1.0.0
     hostname: quantumleap
     container_name: quantumleap
     depends_on:
