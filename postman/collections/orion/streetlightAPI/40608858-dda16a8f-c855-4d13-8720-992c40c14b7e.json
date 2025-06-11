@@ -172,6 +172,50 @@
 						"description": "Haalt een specifieke Streetlight entiteit op basis van ID."
 					},
 					"response": []
+				},
+				{
+					"name": "Streetlight Powerstate Ophalen",
+					"id": "40608858-8f219a42-1880-4ddc-87a3-3ab97ff26183",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/ld+json"
+							},
+							{
+								"key": "Link",
+								"value": "<https://smart-data-models.github.io/dataModel.Streetlighting/context.jsonld>; rel=\"http://www.w3.org/ns/json-ld#context\"; type=\"application/ld+json\"",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entities?attrs=powerState",
+							"protocol": "http",
+							"host": [
+								"{{orion_host}}"
+							],
+							"port": "1026",
+							"path": [
+								"ngsi-ld",
+								"v1",
+								"entities"
+							],
+							"query": [
+								{
+									"key": "attrs",
+									"value": "powerState"
+								}
+							]
+						}
+					},
+					"response": []
 				}
 			],
 			"id": "40608858-8674b427-ada5-4904-aff8-334062118ad7"
