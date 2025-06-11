@@ -160,6 +160,49 @@
 						"description": "Haalt een specifieke Streetlight entiteit op basis van ID."
 					},
 					"response": []
+				},
+				{
+					"name": "Streetlight Aanmaken Bulk",
+					"id": "40608858-a885f631-4168-4d26-9b7a-283a0ff753b4",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/ld+json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "[\n    {\n        \"id\": \"urn:ngsi-ld:Streetlight:Helmond-004\",\n        \"type\": \"Streetlight\",\n        \"location\": {\n            \"type\": \"GeoProperty\",\n            \"value\": {\n                \"type\": \"Point\",\n                \"coordinates\": [\n                    5.654,\n                    51.479\n                ]\n            }\n        },\n        \"illuminance\": {\n            \"type\": \"Property\",\n            \"value\": 750,\n            \"unitCode\": \"LX\"\n        },\n        \"powerState\": {\n            \"type\": \"Property\",\n            \"value\": \"on\"\n        },\n        \"address\": {\n            \"type\": \"Property\",\n            \"value\": {\n                \"streetAddress\": \"Europaweg\",\n                \"addressLocality\": \"Helmond\",\n                \"addressRegion\": \"Noord-Brabant\",\n                \"postalCode\": \"5707CL\",\n                \"addressCountry\": \"NL\"\n            }\n        },\n        \"controlledAsset\": {\n            \"type\": \"Relationship\",\n            \"object\": \"urn:ngsi-ld:LightController:controller-H-001\"\n        },\n        \"@context\": \"https://smart-data-models.github.io/dataModel.Streetlighting/context.jsonld\"\n    },\n    {\n        \"id\": \"urn:ngsi-ld:Streetlight:Eindhoven-004\",\n        \"type\": \"Streetlight\",\n        \"location\": {\n            \"type\": \"GeoProperty\",\n            \"value\": {\n                \"type\": \"Point\",\n                \"coordinates\": [\n                    5.478,\n                    51.441\n                ]\n            }\n        },\n        \"illuminance\": {\n            \"type\": \"Property\",\n            \"value\": 820,\n            \"unitCode\": \"LX\"\n        },\n        \"powerState\": {\n            \"type\": \"Property\",\n            \"value\": \"off\"\n        },\n        \"address\": {\n            \"type\": \"Property\",\n            \"value\": {\n                \"streetAddress\": \"Stratumseind\",\n                \"addressLocality\": \"Eindhoven\",\n                \"addressRegion\": \"Noord-Brabant\",\n                \"postalCode\": \"5611ER\",\n                \"addressCountry\": \"NL\"\n            }\n        },\n        \"controlledAsset\": {\n            \"type\": \"Relationship\",\n            \"object\": \"urn:ngsi-ld:LightController:controller-E-001\"\n        },\n        \"@context\": \"https://smart-data-models.github.io/dataModel.Streetlighting/context.jsonld\"\n    },\n    {\n        \"id\": \"urn:ngsi-ld:Streetlight:Liverpool-004\",\n        \"type\": \"Streetlight\",\n        \"location\": {\n            \"type\": \"GeoProperty\",\n            \"value\": {\n                \"type\": \"Point\",\n                \"coordinates\": [\n                    -2.9916,\n                    53.4084\n                ]\n            }\n        },\n        \"illuminance\": {\n            \"type\": \"Property\",\n            \"value\": 700,\n            \"unitCode\": \"LX\"\n        },\n        \"powerState\": {\n            \"type\": \"Property\",\n            \"value\": \"on\"\n        },\n        \"address\": {\n            \"type\": \"Property\",\n            \"value\": {\n                \"streetAddress\": \"Mathew Street\",\n                \"addressLocality\": \"Liverpool\",\n                \"addressRegion\": \"Merseyside\",\n                \"postalCode\": \"L2 6RE\",\n                \"addressCountry\": \"GB\"\n            }\n        },\n        \"controlledAsset\": {\n            \"type\": \"Relationship\",\n            \"object\": \"urn:ngsi-ld:LightController:controller-L-001\"\n        },\n        \"@context\": \"https://smart-data-models.github.io/dataModel.Streetlighting/context.jsonld\"\n    },\n    {\n        \"id\": \"urn:ngsi-ld:Streetlight:Madrid-004\",\n        \"type\": \"Streetlight\",\n        \"location\": {\n            \"type\": \"GeoProperty\",\n            \"value\": {\n                \"type\": \"Point\",\n                \"coordinates\": [\n                    -3.7038,\n                    40.4168\n                ]\n            }\n        },\n        \"illuminance\": {\n            \"type\": \"Property\",\n            \"value\": 780,\n            \"unitCode\": \"LX\"\n        },\n        \"powerState\": {\n            \"type\": \"Property\",\n            \"value\": \"dusk\"\n        },\n        \"address\": {\n            \"type\": \"Property\",\n            \"value\": {\n                \"streetAddress\": \"Calle Mayor\",\n                \"addressLocality\": \"Madrid\",\n                \"addressRegion\": \"Community of Madrid\",\n                \"postalCode\": \"28013\",\n                \"addressCountry\": \"ES\"\n            }\n        },\n        \"controlledAsset\": {\n            \"type\": \"Relationship\",\n            \"object\": \"urn:ngsi-ld:LightController:controller-M-001\"\n        },\n        \"@context\": \"https://smart-data-models.github.io/dataModel.Streetlighting/context.jsonld\"\n    }\n]",
+							"options": {
+								"raw": {
+									"language": "text"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entityOperations/create",
+							"protocol": "http",
+							"host": [
+								"{{orion_host}}"
+							],
+							"port": "1026",
+							"path": [
+								"ngsi-ld",
+								"v1",
+								"entityOperations",
+								"create"
+							]
+						}
+					},
+					"response": []
 				}
 			],
 			"id": "40608858-8674b427-ada5-4904-aff8-334062118ad7"
