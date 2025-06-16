@@ -137,6 +137,48 @@
 					"response": []
 				},
 				{
+					"name": "Specifieke Streetlight Ophalen Copy",
+					"id": "40608858-d20d24db-feb1-4877-944b-d90c25222bb8",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/ld+json"
+							},
+							{
+								"key": "Link",
+								"value": "<https://smart-data-models.github.io/dataModel.Streetlighting/context.jsonld>; rel=\"http://www.w3.org/ns/json-ld#context\"; type=\"application/ld+json\"",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "http://{{orion_host}}:1026/ngsi-ld/v1/entities?type=Streetlight",
+							"protocol": "http",
+							"host": [
+								"{{orion_host}}"
+							],
+							"port": "1026",
+							"path": [
+								"ngsi-ld",
+								"v1",
+								"entities"
+							],
+							"query": [
+								{
+									"key": "type",
+									"value": "Streetlight"
+								}
+							]
+						},
+						"description": "Haalt een specifieke Streetlight entiteit op basis van ID."
+					},
+					"response": []
+				},
+				{
 					"name": "Illuminance Specifieke Streetlight Ophalen",
 					"id": "40608858-a74ff4ca-3fdd-4be3-a557-2076abcaa33b",
 					"protocolProfileBehavior": {
