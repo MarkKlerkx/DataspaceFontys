@@ -137,7 +137,7 @@
 					"response": []
 				},
 				{
-					"name": "Specifieke Streetlight Ophalen Copy",
+					"name": "Powerstate Specifieke Streetlight Ophalen",
 					"id": "40608858-d20d24db-feb1-4877-944b-d90c25222bb8",
 					"protocolProfileBehavior": {
 						"disableBodyPruning": true
