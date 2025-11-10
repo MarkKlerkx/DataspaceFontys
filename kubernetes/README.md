@@ -1,5 +1,8 @@
 This folder contains parts of the following repository: https://github.com/wistefan/deployment-demo/tree/main
 
+------------------------------------------------------------------------------
+
+
 
 **Consumer/Provider values.yaml-template**
 
