@@ -1,0 +1,86 @@
+---
+# Source: trust-anchor/charts/trusted-issuers-list/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tir
+  namespace: "trust-anchor"
+  labels:
+    
+    app.kubernetes.io/name: trusted-issuers-list
+    helm.sh/chart: trusted-issuers-list-0.6.2
+    app.kubernetes.io/instance: trust-anchor
+    app.kubernetes.io/version: "0.0.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: trusted-issuers-list
+      app.kubernetes.io/instance: trust-anchor
+  template:
+    metadata:
+      labels:
+        
+        app.kubernetes.io/name: trusted-issuers-list
+        helm.sh/chart: trusted-issuers-list-0.6.2
+        app.kubernetes.io/instance: trust-anchor
+        app.kubernetes.io/version: "0.0.2"
+        app.kubernetes.io/managed-by: Helm
+    spec: 
+      serviceAccountName: default
+      containers:
+        - name: trusted-issuers-list
+          imagePullPolicy: IfNotPresent
+          image: "quay.io/fiware/trusted-issuers-list:0.0.2"
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: http-health
+              containerPort: 9090
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http-health
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http-health
+            initialDelaySeconds: 31
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 30
+          env:
+            - name: ENDPOINTS_ALL_PORT
+              value: "9090"
+            - name: MICRONAUT_SERVER_PORT
+              value: "8080"
+            - name: MICRONAUT_METRICS_ENABLED
+              value: "true"
+            - name: DATASOURCES_DEFAULT_URL
+              value: "jdbc:mysql://trust-anchor-mysql:3306/tirdb"
+            - name: DATASOURCES_DEFAULT_DRIVER_CLASS_NAME
+              value: "com.mysql.cj.jdbc.Driver"
+            - name: DATASOURCES_DEFAULT_USERNAME
+              value: "root"
+            - name: DATASOURCES_DEFAULT_DIALECT
+              value: "MYSQL"
+            - name: DATASOURCES_DEFAULT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-database-secret
+                  key: mysql-root-password
+          resources:
+            null

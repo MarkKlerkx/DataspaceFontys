@@ -1,0 +1,25 @@
+---
+# Source: trust-anchor/charts/mysql/templates/primary/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: trust-anchor-mysql-headless
+  namespace: "trust-anchor"
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-9.4.4
+    app.kubernetes.io/instance: trust-anchor
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: mysql
+  selector: 
+    app.kubernetes.io/name: mysql
+    app.kubernetes.io/instance: trust-anchor
+    app.kubernetes.io/component: primary

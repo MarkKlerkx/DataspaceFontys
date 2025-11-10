@@ -1,0 +1,429 @@
+# -- no apis offered, thus no authentication framework required
+vcverifier:
+  enabled: false
+# -- no verifier deployed, thus no supporting services required
+credentials-config-service:
+  enabled: false
+# -- no verifier deployed, thus no supporting services required
+trusted-issuers-list:
+  enabled: false
+# -- no trusted-issuers-list deployed, thus no db for it required
+mysql:
+  enabled: false
+# -- no apis offered, thus no policy administration required
+odrl-pap:
+  enabled: false
+# -- no apis offered, thus no policy enforcement required
+apisix:
+  enabled: false
+# -- nothing offered, thus no broker
+scorpio:
+  enabled: false
+# -- no scorpio, thus no db for it
+postgis:
+  enabled: false
+# -- nothing offered, thus no api to offer something required
+tm-forum-api:
+  enabled: false
+# -- nothing offered, thus no contracts need to be managed
+contract-management:
+  enabled: false
+
+# -- database for keycloak as the issuer needs to be registered
+postgresql:
+  # -- should it be enabled? set to false if one outside the chart is used.
+  enabled: true
+  global:
+    security:
+      # allow the image from the legacy repo
+      allowInsecureImages: true
+  # -- configuration of the used image
+  image:
+    # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
+    repository: bitnamilegacy/postgresql
+    # -- fixes the unpullable image referenced in the chart
+    tag: 13.18.0
+  # -- allows to set a fixed name for the services
+  fullnameOverride: postgresql
+  generatePasswords:
+    # -- should a password for the database be generated in the cluster
+    enabled: true
+    # -- name of the secret to store the password in
+    secretName: database-secret
+  # -- configure authentication to mysql
+  auth:
+    # -- name of the secret to take the passowrds from
+    existingSecret: database-secret
+    # -- key of the secrets inside the secret
+    secretKeys:
+      adminPasswordKey: postgres-admin-password
+      userPasswordKey: postgres-user-password
+  # -- configuration for the primary of the db
+  primary:
+    # -- scripts to be run on intialization
+    initdb:
+      scripts:
+        create.sh: |
+          psql postgresql://postgres:${POSTGRES_PASSWORD}@localhost:5432 -c "CREATE DATABASE keycloak;"
+    persistence:
+      enabled: true      
+      # use one of the classes provided by your cluster
+      storageClass: local-path
+
+# -- keycloak as issuer of verifiable credentials is required
+keycloak:
+  ingress:
+    enabled: true
+    hostname: keycloak-consumer.192.168.165.211.nip.io
+  
+  global:
+    security:
+      # allow the image from the legacy repo
+      allowInsecureImages: true
+  # -- configuration of the used image
+  image:
+    # -- repository where the image is held, see https://github.com/bitnami/charts/issues/35164 for further info
+    repository: keycloak/keycloak
+    tag: 26.3.2
+  # -- disable the security context, required by the current quarkus container, will be solved in the future chart versions of keycloak
+  containerSecurityContext:
+    enabled: false
+  proxyHeaders: xforwarded
+  proxy: edge
+  service:
+    ports:
+      http: 8080
+  
+  # -- sets memory requests for keycloak
+  # increased above the bitnami defaults to prevent OOMs in linux kernel >=6.14
+  resources:
+    requests:
+      memory: "500Mi"
+      cpu: "0.5"
+    limits:
+      memory: "2Gi"
+      cpu: "1"
+
+  # -- should the db be deployed as part of the keycloak chart
+  postgresql:
+    enabled: false
+  # -- host of the external db to be used
+  externalDatabase:
+    host: postgresql
+    database: keycloak
+    user: postgres
+    existingSecret: database-secret
+    existingSecretPasswordKey: postgres-admin-password
+
+  extraEnvVars:
+    # import the configured realm
+    - name: KEYCLOAK_EXTRA_ARGS
+      value: "--import-realm"
+    # enable the issuance feature
+    - name: KC_FEATURES
+      value: "oid4vc-vci"
+    # password for reading the key store connected to the did
+    - name: STORE_PASS
+      value: test
+    - name: KEYCLOAK_HOSTNAME
+      value: http://keycloak-consumer.192.168.165.211.nip.io
+    # keycloak admin password
+    - name: KC_ADMIN_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: issuance-secret
+          key: keycloak-admin
+    # set in accordance with the memory requests, will result in OOM otherwise
+    - name: KC_HEAP_SIZE
+      value: "1024m"
+    # log level for keycloak
+    - name: KEYCLOAK_LOG_LEVEL
+      value: DEBUG
+    # did of the consumer
+    - name: DID
+      value: did:key:zDnaexqWLXTatimpNYmmwkJ5ET58XXB1yGuqB5KHWJ9DB9D4V
+
+  extraVolumeMounts:
+    - name: did-material
+      mountPath: /did-material/cert.pfx
+      subPath: cert.pfx
+    - name: realms
+      mountPath: /opt/bitnami/keycloak/data/import
+
+  extraVolumes:
+    - name: did-material
+      secret:
+        secretName: consumer-identity
+    - name: realms
+      configMap:
+        name: test-realm-realm
+
+  realm:
+    import: true
+    name: test-realm
+    # -- frontend url to be used for the realm
+    frontendURL: http://localhost:8080
+    attributes: |
+      "issuerDid": "${DID}",
+      "vc.user-credential.credential_signing_alg_values_supported": "ES256",
+      "vc.user-credential.credential_build_config.signing_algorithm": "ES256",
+      "vc.user-credential.credential_build_config.token_jws_type": "JWT",
+      "vc.user-credential.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
+      "vc.user-credential.format": "jwt_vc",
+      "vc.user-credential.scope": "UserCredential",
+      "vc.user-credential.vct": "UserCredential"
+    clientRoles: |
+      "": [
+        {
+          "name": "READER",
+          "description": "Is allowed to see offers etc.",
+          "clientRole": true
+        },
+        {
+          "name": "OPERATOR",
+          "description": "Is allowed to operate clusters.",
+          "clientRole": true
+        }
+      ]
+
+    users: |
+      {
+        "username": "test-user",
+        "enabled": true,
+        "email": "test@user.org",
+        "firstName": "Test",
+        "lastName": "Reader",
+        "credentials": [
+          {
+            "type": "password",
+            "value": "test"
+          }
+        ],
+        "clientRoles": {
+          "": [
+            "READER",
+            "OPERATOR"
+          ],
+          "account": [
+            "view-profile",
+            "manage-account"
+          ]
+        },
+        "realmRoles": [
+          "user",
+          "default-roles-test-realm"
+        ],
+        "groups": [
+        ]
+      }
+    clientScopes: |
+      {
+        "name": "UserCredential",
+        "description": "OIDC4VC Scope, that adds all properties required for a user.",
+        "protocol": "openid-connect",
+        "attributes": {
+          "include.in.token.scope": "false",
+          "display.on.consent.screen": "false"
+        },
+        "protocolMappers": [
+          {
+            "name": "context-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-context-mapper",
+            "config": {
+              "context": "https://www.w3.org/2018/credentials/v1",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          },
+          {
+            "name": "email-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-user-attribute-mapper",
+            "config": {
+              "subjectProperty": "email",
+              "userAttribute": "email",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          },
+          {
+            "name": "firstName-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-user-attribute-mapper",
+            "config": {
+              "subjectProperty": "firstName",
+              "userAttribute": "firstName",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          },
+          {
+            "name": "street-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "street",
+              "staticValue": "Main Street",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          },
+          {
+            "name": "lastName-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-user-attribute-mapper",
+            "config": {
+              "subjectProperty": "lastName",
+              "userAttribute": "lastName",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          },
+          {
+            "name": "role-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-target-role-mapper",
+            "config": {
+              "subjectProperty": "roles",
+              "clientId": "",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          },
+          {
+            "name": "streetNumber-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "streetNumber",
+              "staticValue": "10",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          },
+          {
+            "name": "city-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "city",
+              "staticValue": "Dresden",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          },
+          {
+            "name": "region-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "region",
+              "staticValue": "Saxony",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          },
+          {
+            "name": "country-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "country",
+              "staticValue": "Germany",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          },
+          {
+            "name": "zipcode-mapper-uc",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-static-claim-mapper",
+            "config": {
+              "subjectProperty": "zipcode",
+              "staticValue": "01169",
+              "supportedCredentialTypes": "UserCredential"
+            }
+          }
+        ]
+      }
+    clients: |
+      {
+        "clientId": "",
+        "enabled": true,
+        "description": "Client to connect test.org",
+        "surrogateAuthRequired": false,
+        "alwaysDisplayInConsole": false,
+        "clientAuthenticatorType": "client-secret",
+        "defaultRoles": [],
+        "redirectUris": [],
+        "webOrigins": [],
+        "notBefore": 0,
+        "bearerOnly": false,
+        "consentRequired": false,
+        "standardFlowEnabled": true,
+        "implicitFlowEnabled": false,
+        "directAccessGrantsEnabled": false,
+        "serviceAccountsEnabled": false,
+        "publicClient": false,
+        "frontchannelLogout": false,
+        "protocol": "oid4vc",
+        "attributes": {
+          "client.secret.creation.time": "1675260539"
+        },
+        "protocolMappers": [
+        ],
+        "authenticationFlowBindingOverrides": {},
+        "fullScopeAllowed": true,
+        "nodeReRegistrationTimeout": -1,
+        "defaultClientScopes": [],
+        "optionalClientScopes": []
+      },
+      {
+        "clientId": "test-cli",
+        "name": "test-cli",
+        "rootUrl": "${authBaseUrl}",
+        "baseUrl": "/realms/test-realm/test-cli/",
+        "surrogateAuthRequired": false,
+        "enabled": true,
+        "alwaysDisplayInConsole": false,
+        "clientAuthenticatorType": "client-secret",
+        "redirectUris": [
+          "/realms/test-realm/test-cli/*"
+        ],
+        "webOrigins": [],
+        "notBefore": 0,
+        "bearerOnly": false,
+        "consentRequired": false,
+        "standardFlowEnabled": true,
+        "implicitFlowEnabled": false,
+        "directAccessGrantsEnabled": true,
+        "serviceAccountsEnabled": false,
+        "publicClient": true,
+        "frontchannelLogout": false,
+        "protocol": "openid-connect",
+        "attributes": {
+          "realm_client": "false",
+          "post.logout.redirect.uris": "+",
+          "pkce.code.challenge.method": "S256"
+        },
+        "authenticationFlowBindingOverrides": {},
+        "fullScopeAllowed": true,
+        "nodeReRegistrationTimeout": 0,
+        "protocolMappers": [
+          {
+            "id": "706c5202-1b03-4fad-a5b8-484287e941f8",
+            "name": "audience resolve",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-audience-resolve-mapper",
+            "consentRequired": false,
+            "config": {}
+          }
+        ],
+        "defaultClientScopes": [
+          "web-origins",
+          "acr",
+          "roles",
+          "profile",
+          "basic",
+          "email"
+        ],
+        "optionalClientScopes": [
+          "address",
+          "phone",
+          "offline_access",
+          "organization",
+          "microprofile-jwt",
+          "UserCredential"
+        ]
+      }

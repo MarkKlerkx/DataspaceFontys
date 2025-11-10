@@ -1,0 +1,16 @@
+---
+# Source: trust-anchor/charts/mysql/templates/primary/initialization-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trust-anchor-mysql-init-scripts
+  namespace: "trust-anchor"
+  labels:
+    app.kubernetes.io/name: mysql
+    helm.sh/chart: mysql-9.4.4
+    app.kubernetes.io/instance: trust-anchor
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+data:
+  create.sql: |
+    CREATE DATABASE tirdb;

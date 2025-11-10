@@ -1,0 +1,26 @@
+---
+# Source: trust-anchor/charts/trusted-issuers-list/templates/ingress-tir.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tir-tir
+  namespace: "trust-anchor"
+  labels:
+    
+    app.kubernetes.io/name: trusted-issuers-list
+    helm.sh/chart: trusted-issuers-list-0.6.2
+    app.kubernetes.io/instance: trust-anchor
+    app.kubernetes.io/version: "0.0.2"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  rules:
+  - host: "tir.127.0.0.1.nip.io"
+    http:
+      paths:
+      - path: /v4/issuers
+        pathType: Prefix
+        backend:
+          service:
+            name: tir
+            port:
+              number: 8080
