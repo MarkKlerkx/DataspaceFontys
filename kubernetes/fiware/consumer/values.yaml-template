@@ -140,7 +140,7 @@ keycloak:
     - name: KEYCLOAK_LOG_LEVEL
       value: DEBUG
     # did of the consumer
-    - name: DID
+    - name: DID_CONSUMER
       value: DID_CONSUMER
 
   extraVolumeMounts:
@@ -164,7 +164,7 @@ keycloak:
     # -- frontend url to be used for the realm
     frontendURL: http://localhost:8080
     attributes: |
-      "issuerDid": "${DID}",
+      "issuerDid": "${DID_CONSUMER}",
       "vc.user-credential.credential_signing_alg_values_supported": "ES256",
       "vc.user-credential.credential_build_config.signing_algorithm": "ES256",
       "vc.user-credential.credential_build_config.token_jws_type": "JWT",
@@ -173,7 +173,7 @@ keycloak:
       "vc.user-credential.scope": "UserCredential",
       "vc.user-credential.vct": "UserCredential"
     clientRoles: |
-      "DID_PROVIDER": [
+      "DID_CONSUMER": [
         {
           "name": "READER",
           "description": "Is allowed to see offers etc.",
@@ -200,7 +200,7 @@ keycloak:
           }
         ],
         "clientRoles": {
-          "DID_PROVIDER": [
+          "DID_CONSUMER": [
             "READER",
             "OPERATOR"
           ],
@@ -281,7 +281,7 @@ keycloak:
             "protocolMapper": "oid4vc-target-role-mapper",
             "config": {
               "subjectProperty": "roles",
-              "clientId": "DID_PROVIDER",
+              "clientId": "DID_CONSUMER",
               "supportedCredentialTypes": "UserCredential"
             }
           },
@@ -339,7 +339,7 @@ keycloak:
       }
     clients: |
       {
-        "clientId": "DID_PROVIDER",
+        "clientId": "DID_CONSUMER",
         "enabled": true,
         "description": "Client to connect test.org",
         "surrogateAuthRequired": false,
