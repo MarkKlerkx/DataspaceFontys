@@ -279,7 +279,7 @@ keycloak:
     - name: KEYCLOAK_LOG_LEVEL
       value: DEBUG
     # did of the provider
-    - name: DID
+    - name: DID_PROVIDER
       value: DID_PROVIDER
 
   extraVolumeMounts:
@@ -303,7 +303,7 @@ keycloak:
     # -- frontend url to be used for the realm
     frontendURL: http://localhost:8080
     attributes: |
-      "issuerDid": "${DID}",
+      "issuerDid": "${DID_PROVIDER}",
       "vc.user-credential.credential_signing_alg_values_supported": "ES256",
       "vc.user-credential.credential_build_config.signing_algorithm": "ES256",
       "vc.user-credential.credential_build_config.token_jws_type": "JWT",
