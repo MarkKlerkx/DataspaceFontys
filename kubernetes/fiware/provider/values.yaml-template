@@ -222,7 +222,7 @@ contract-management:
 keycloak:
   ingress:
     enabled: true
-    hostname: keycloak-provider.${INTERNAL_IP}.nip.io
+    hostname: keycloak-provider.INTERNAL_IP.nip.io
 
   # -- disable the security context, required by the current quarkus container, will be solved in the future chart versions of keycloak
   containerSecurityContext:
@@ -265,7 +265,7 @@ keycloak:
     - name: STORE_PASS
       value: test
     - name: KEYCLOAK_HOSTNAME
-      value: http://keycloak-provider.${INTERNAL_IP}.nip.io
+      value: http://keycloak-provider.INTERNAL_IP.nip.io
     # keycloak admin password
     - name: KC_ADMIN_PASSWORD
       valueFrom:
@@ -279,7 +279,7 @@ keycloak:
     - name: KEYCLOAK_LOG_LEVEL
       value: DEBUG
     # did of the provider
-    - name: DID_PROVIDER
+    - name: DID
       value: DID_PROVIDER
 
   extraVolumeMounts:
@@ -303,7 +303,7 @@ keycloak:
     # -- frontend url to be used for the realm
     frontendURL: http://localhost:8080
     attributes: |
-      "issuerDid": "${DID_PROVIDER}",
+      "issuerDid": "${DID}",
       "vc.user-credential.credential_signing_alg_values_supported": "ES256",
       "vc.user-credential.credential_build_config.signing_algorithm": "ES256",
       "vc.user-credential.credential_build_config.token_jws_type": "JWT",
