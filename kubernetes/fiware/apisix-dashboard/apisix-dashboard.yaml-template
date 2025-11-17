@@ -63,9 +63,8 @@ kind: Ingress
 metadata:
   name: apisix-dashboard-ingress
   namespace: provider
-  annotations:
-    kubernetes.io/ingress.class: traefik
 spec:
+  ingressClassName: traefik
   rules:
   - host: "apisix-dashboard.INTERNAL_IP.nip.io"
     http:
