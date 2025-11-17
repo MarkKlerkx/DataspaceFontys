@@ -2,8 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: apisix-dashboard-config
-  # BELANGRIJK: Gebruik dezelfde namespace als je bestaande APISIX-installatie
-  namespace: default
+  namespace: provider
 data:
   conf.yaml: |
     listen:
@@ -11,21 +10,15 @@ data:
     
     apisix:
       admin_api:
-        # Dit is de cruciale link:
-        # We verwijzen naar de *interne service* van je bestaande control plane.
         base_url: "http://provider-dsc-apisix-control-plane:9180"
-        
-        # !! VIND DEZE KEY EN VERVANG HEM !!
-        # Dit MOET de admin_key zijn die je *bestaande* APISIX control-plane
-        # gebruikt. Deze staat in je Helm values.yaml of in een secret.
-        admin_key: "VERVANG_DEZE_ADMIN_KEY"
+        admin_key: "APISIX_ADMIN_KEY"
 
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: apisix-dashboard
-  namespace: default # Zorg dat dit de juiste namespace is
+  namespace: provider
 spec:
   replicas: 1
   selector:
@@ -38,7 +31,6 @@ spec:
     spec:
       containers:
       - name: apisix-dashboard
-        # Gebruik een recente stabiele image
         image: apache/apisix-dashboard:3.0.1
         ports:
         - containerPort: 9000
@@ -56,7 +48,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: apisix-dashboard-service
-  namespace: default # Zorg dat dit de juiste namespace is
+  namespace: provider
 spec:
   selector:
     app: apisix-dashboard
@@ -70,13 +62,12 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: apisix-dashboard-ingress
-  namespace: default # Zorg dat dit de juiste namespace is
+  namespace: provider
   annotations:
-    # Aannemend dat je Traefik gebruikt (standaard in K3s)
     kubernetes.io/ingress.class: traefik
 spec:
   rules:
-  - host: "apisix-dashboard.VERVANG_INTERNAL_IP.nip.io" # <-- PAS DEZE AAN
+  - host: "apisix-dashboard.INTERNAL_IP.nip.io"
     http:
       paths:
       - path: /
