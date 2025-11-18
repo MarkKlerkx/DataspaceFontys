@@ -15,15 +15,22 @@ vcverifier:
   deployment:
     verifier:
       # address of the trust anchor
-      tirAddress: http://tir.INTERNAL_IP.nip.io/
-      did: DID_PROVIDER
+      tirAddress: http://tir.192.168.165.211.nip.io/
+      did: did:key:zDnaeTTBxcVmUk1wMooyfvFp9RtAvfKAX54Z6ovJbTUuHBsfV
       supportedModes: ["urlEncoded"]
     # public address of the verifier, to be provided as oid-config
     server:
-      host: http://provider-verifier.INTERNAL_IP.nip.io
+      host: http://provider-verifier.192.168.165.211.nip.io
     # access to the internal credentials-config-service
     configRepo:
       configEndpoint: http://credentials-config-service:8080
+    initContainers:
+      - name: wait-for-config-service
+        image: busybox:1.28
+        command: 
+          - 'sh'
+          - '-c'
+          - "until nc -z -v -w 2 credentials-config-service 8080; do echo Waiting for credentials-config-service...; sleep 2; done"
 
 credentials-config-service:
   enabled: true
