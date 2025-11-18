@@ -23,7 +23,7 @@ vcverifier:
       host: http://provider-verifier.INTERNAL_IP.nip.io
     # access to the internal credentials-config-service
     configRepo:
-      configEndpoint: http://credentials-config-service
+      configEndpoint: http://credentials-config-service:8080
 
 credentials-config-service:
   enabled: true
