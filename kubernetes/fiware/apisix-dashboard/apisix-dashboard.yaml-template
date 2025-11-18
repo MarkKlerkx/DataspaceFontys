@@ -1,0 +1,35 @@
+image:
+  repository: apache/apisix-dashboard
+  tag: "3.0.1-centos"
+  pullPolicy: IfNotPresent
+
+apisix:
+  enabled: false
+etcd:
+  enabled: false
+
+config:
+  conf:
+    etcd:
+      endpoints:
+        - provider-dsc-etcd-headless.provider.svc.cluster.local:2379
+      
+    authentication:
+      secret: confidential
+      users:
+        - username: admin
+          password: admin
+
+ingress:
+  enabled: true
+  className: traefik 
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure 
+  hosts:
+    - host: apisix-dashboard.INTERNAL_IP.nip.io
+      paths:
+        - "/"
+  tls:
+    - secretName: provider-dsc-apisix-control-plane-tls
+      hosts:
+        - apisix-dashboard.INTERNAL_IP.nip.io
