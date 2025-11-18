@@ -147,6 +147,13 @@ apisix:
           policy: policy/main
           with_body: true
 
+  etcd:
+    enabled: true
+    persistence:
+      enabled: true
+      storageClass: local-path
+      size: 8Gi
+
 # -- configuration for the open-policy-agent to be deployed as part of the connector fulfilling the role of the PDP, as a sidecar to apisix
 opa:
   # -- should an opa sidecar be deployed to apisix
