@@ -87,7 +87,9 @@ dataSpaceConfig:
 apisix:
   dataPlane:
     # -- configure the ingress to the data service
-    ingress:
+  service:
+      type: ClusterIP    
+  ingress:
       enabled: true
       hostname: mp-data-service.INTERNAL_IP.nip.io 
   catchAllRoute:
