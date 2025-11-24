@@ -13,7 +13,7 @@ data:
     # URL en Key instellingen
     ADMIN_URL="http://apisix-admin:9180/apisix/admin/routes"
     ADMIN_KEY="iaB7npvHkpztst7qZ3Mt0JjECXgCcLFw"
-    HOST_DOMAIN="mp-data-service.192.168.165.211.nip.io"
+    HOST_DOMAIN="mp-data-service.INTERNAL_IP.nip.io"
 
     echo "========================================================"
     echo "STARTING ROUTE IMPORT (DEBUG MODE)"
