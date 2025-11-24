@@ -92,67 +92,7 @@ dataSpaceConfig:
 
 # -- apisix configuration
 apisix:
-  dataPlane:
-    service:
-      type: ClusterIP    
-    ingress:
-      enabled: true
-      hostname: mp-data-service.INTERNAL_IP.nip.io 
-  catchAllRoute:
-    enabled: false
-  routes: |-
-    # route to answer all openid-config requests to the data service from within the verifier
-    - uri: /.well-known/openid-configuration
-      host: mp-data-service.INTERNAL_IP.nip.io
-      upstream:
-        nodes:
-          verifier:3000: 1
-        type: roundrobin
-      plugins:
-        proxy-rewrite:
-          uri: /services/data-service/.well-known/openid-configuration
-    # route to provider data-space-configuration
-    - uri: /.well-known/data-space-configuration
-      host: mp-data-service.INTERNAL_IP.nip.io
-      upstream:
-        nodes:
-          dsconfig:3002: 1
-        type: roundrobin
-      plugins:
-        proxy-rewrite:
-          uri: /.well-known/data-space-configuration/data-space-configuration.json
-        response-rewrite:
-          headers:
-            set:
-              content-type: application/json
-    # central route to the dataservice
-    - uri: /*
-      host: mp-data-service.INTERNAL_IP.nip.io
-      upstream:
-        nodes:
-          data-service-scorpio:9090: 1
-        type: roundrobin
-      plugins:
-        # verify the jwt at the verifiers endpoint
-        openid-connect:
-          bearer_only: true
-          use_jwks: true
-          client_id: data-service
-          client_secret: unused
-          ssl_verify: false
-          discovery: http://verifier:3000/services/data-service/.well-known/openid-configuration
-        # request decisions at opa
-        opa:
-          host: "http://localhost:8181"
-          policy: policy/main
-          with_body: true
-
-  etcd:
-    enabled: true
-    persistence:
-      enabled: true
-      storageClass: local-path
-      size: 8Gi
+  enabled: false
 
 # -- configuration for the open-policy-agent to be deployed as part of the connector fulfilling the role of the PDP, as a sidecar to apisix
 opa:
