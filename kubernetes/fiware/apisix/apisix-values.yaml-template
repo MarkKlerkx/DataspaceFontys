@@ -1,0 +1,105 @@
+# -- Global Configuration --
+global:
+  imageRegistry: ""
+  security:
+    allowInsecureImages: true
+
+# -- Core APISIX Configuration (Image, Admin, Plugins) --
+apisix:
+  enabled: true
+  image:
+    repository: apache/apisix
+    tag: 3.14.0-debian
+  
+  deployment:
+    mode: traditional
+    replicas: 1
+
+  # Admin API settings (zitten WEL onder apisix)
+  admin:
+    enabled: true
+    type: ClusterIP
+    allow:
+      ipList:
+        - 0.0.0.0/0
+    credentials:
+      secretName: apisix-admin-secret
+      secretAdminKey: "admin-key"
+      adminKey: "iaB7npvHkpztst7qZ3Mt0JjECXgCcLFw"
+
+  plugins:
+    - opa
+    - openid-connect
+    - proxy-rewrite
+    - limit-req
+    - limit-count
+    - cors
+    - key-auth
+    - basic-auth
+    - prometheus # Belangrijk voor de stabiliteit
+
+  enable_debug: true
+
+# -- Gateway Service Configuration (MOET OP HOOFDNIVEAU) --
+# Dit regelt de service 'apisix-gateway'
+gateway:
+  type: ClusterIP
+  http:
+    enabled: true
+    port: 80
+
+ingress:
+  enabled: true
+  className: traefik
+  annotations:
+    kubernetes.io/ingress.class: traefik
+  hosts:
+    - host: mp-data-service.192.168.165.211.nip.io
+      paths:
+        - "/"
+
+# -- Etcd Configuration --
+etcd:
+  enabled: true
+  fullnameOverride: provider-dsc-etcd
+  replicaCount: 1
+  image:
+    registry: public.ecr.aws
+    repository: bitnami/etcd
+    tag: "3.5.12-debian-11-r0"
+    pullPolicy: IfNotPresent  
+  persistence:
+    enabled: true
+    size: 8Gi
+    storageClass: local-path
+  auth:
+    rbac:
+      create: false
+  volumePermissions:
+    enabled: true
+    image:
+      registry: public.ecr.aws
+      repository: bitnami/os-shell
+      tag: 12-debian-12-r26
+      pullPolicy: IfNotPresent
+  startupProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 60
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 5
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 10
+    failureThreshold: 5
+
+ingress-controller:
+  enabled: false

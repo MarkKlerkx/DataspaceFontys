@@ -11,8 +11,12 @@ etcd:
 config:
   conf:
     etcd:
+      prefix: "/apisix"
       endpoints:
-        - provider-dsc-etcd-headless.provider.svc.cluster.local:2379
+        - provider-dsc-etcd.provider.svc.cluster.local:2379
+      prefix: "/apisix"
+      username: null
+      password: null
       
     authentication:
       secret: confidential
@@ -26,10 +30,10 @@ ingress:
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: websecure 
   hosts:
-    - host: apisix-dashboard.INTERNAL_IP.nip.io
+    - host: apisix-dashboard.192.168.165.211.nip.io
       paths:
         - "/"
-  tls:
-    - secretName: provider-dsc-apisix-control-plane-tls
-      hosts:
-        - apisix-dashboard.INTERNAL_IP.nip.io
+  # tls:
+  #  - secretName: provider-dsc-apisix-control-plane-tls
+  #    hosts:
+  #      - apisix-dashboard.192.168.165.211.nip.io
