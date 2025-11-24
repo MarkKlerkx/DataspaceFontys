@@ -31,6 +31,7 @@ apisix:
     - opa
     - openid-connect
     - proxy-rewrite
+    - response-rewrite
     - limit-req
     - limit-count
     - cors
@@ -40,7 +41,7 @@ apisix:
 
   enable_debug: true
 
-# -- Gateway Service Configuration (MOET OP HOOFDNIVEAU) --
+# -- Gateway Service Configuration --
 # Dit regelt de service 'apisix-gateway'
 gateway:
   type: ClusterIP
@@ -54,7 +55,7 @@ ingress:
   annotations:
     kubernetes.io/ingress.class: traefik
   hosts:
-    - host: mp-data-service.192.168.165.211.nip.io
+    - host: mp-data-service.INTERNAL_IP.nip.io
       paths:
         - "/"
 
