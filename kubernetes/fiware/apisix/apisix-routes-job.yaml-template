@@ -1,93 +1,59 @@
-# 1. DE CONFIGMAP (Het script - Data)
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  # Let op: ik gebruik hier de naam die jij koos
   name: apisix-routes-job
   namespace: provider
 data:
   init_routes.sh: |
     #!/bin/sh
-    # Debug script voor APISIX routes
-    
-    # URL en Key instellingen
     ADMIN_URL="http://apisix-admin:9180/apisix/admin/routes"
     ADMIN_KEY="iaB7npvHkpztst7qZ3Mt0JjECXgCcLFw"
-    HOST_DOMAIN="mp-data-service.INTERNAL_IP.nip.io"
+    HOST_DOMAIN="mp-data-service.192.168.165.211.nip.io"
 
-    echo "========================================================"
-    echo "STARTING ROUTE IMPORT (DEBUG MODE)"
-    echo "Target: $ADMIN_URL"
-    echo "Host:   $HOST_DOMAIN"
-    echo "========================================================"
+    echo "--- Importing Routes ---"
 
     put_route() {
       ID=$1
-      JSON_PAYLOAD=$2
-      
-      echo ""
-      echo "--------------------------------------------------------"
-      echo "PROCESSING ROUTE: $ID"
-      echo "[DEBUG] Sending Request..."
-      
-      # -i toont headers (HTTP codes), -s verbergt voortgangsbalk
-      RESPONSE=$(curl -s -i -X PUT "$ADMIN_URL/$ID" \
+      JSON=$2
+      echo "Configuring $ID..."
+      curl -s -i -X PUT "$ADMIN_URL/$ID" \
         -H "X-API-KEY: $ADMIN_KEY" \
         -H "Content-Type: application/json" \
-        -d "$JSON_PAYLOAD")
-      
-      echo "[DEBUG] Response from APISIX:"
-      echo "$RESPONSE"
+        -d "$JSON"
     }
 
-    # --- ROUTE 1: OpenID Configuration ---
+    # Route 1: OIDC
     JSON_1=$(cat <<EOF
     {
       "uri": "/.well-known/openid-configuration",
       "name": "openid-config-route",
       "host": "$HOST_DOMAIN",
       "plugins": {
-        "proxy-rewrite": {
-          "uri": "/services/data-service/.well-known/openid-configuration"
-        }
+        "proxy-rewrite": { "uri": "/services/data-service/.well-known/openid-configuration" }
       },
-      "upstream": {
-        "type": "roundrobin",
-        "nodes": { "verifier:3000": 1 }
-      }
+      "upstream": { "type": "roundrobin", "nodes": { "verifier:3000": 1 } }
     }
     EOF
     )
     put_route "openid-config" "$JSON_1"
 
-    # --- ROUTE 2: Data Space Configuration ---
+    # Route 2: Dataspace Config
     JSON_2=$(cat <<EOF
     {
       "uri": "/.well-known/data-space-configuration",
       "name": "dataspace-config-route",
       "host": "$HOST_DOMAIN",
       "plugins": {
-        "proxy-rewrite": {
-          "uri": "/.well-known/data-space-configuration/data-space-configuration.json"
-        },
-        "response-rewrite": {
-          "headers": {
-            "set": {
-              "content-type": "application/json"
-            }
-          }
-        }
+        "proxy-rewrite": { "uri": "/.well-known/data-space-configuration/data-space-configuration.json" },
+        "response-rewrite": { "headers": { "set": { "content-type": "application/json" } } }
       },
-      "upstream": {
-        "type": "roundrobin",
-        "nodes": { "dsconfig:3002": 1 }
-      }
+      "upstream": { "type": "roundrobin", "nodes": { "dsconfig:3002": 1 } }
     }
     EOF
     )
     put_route "dataspace-config" "$JSON_2"
 
-    # --- ROUTE 3: Main Catch-All (Scorpio) ---
+    # Route 3: Scorpio (Catch-all) + OPA (Localhost) + OIDC
     JSON_3=$(cat <<EOF
     {
       "uri": "/*",
@@ -97,34 +63,24 @@ data:
       "plugins": {
         "openid-connect": {
           "bearer_only": true,
-          "use_jwks": true,
           "client_id": "data-service",
           "client_secret": "unused",
+          "discovery": "http://verifier:3000/services/data-service/.well-known/openid-configuration",
           "ssl_verify": false,
-          "discovery": "http://verifier:3000/services/data-service/.well-known/openid-configuration"
+          "use_jwks": true
         },
         "opa": {
-          "host": "http://opa:8181",
+          "host": "http://127.0.0.1:8181",
           "policy": "policy/main",
           "with_body": true
         }
       },
-      "upstream": {
-        "type": "roundrobin",
-        "nodes": { "data-service-scorpio:9090": 1 }
-      }
+      "upstream": { "type": "roundrobin", "nodes": { "data-service-scorpio:9090": 1 } }
     }
     EOF
     )
     put_route "main-service" "$JSON_3"
-
-    echo ""
-    echo "========================================================"
-    echo "IMPORT FINISHED"
-    echo "========================================================"
-
 ---
-# 2. DE JOB (De uitvoerder - Container)
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -138,12 +94,10 @@ spec:
       volumes:
         - name: script-volume
           configMap:
-            # Dit moet matchen met de naam bovenaan dit bestand
             name: apisix-routes-job
             defaultMode: 0755
       containers:
       - name: init-routes
-        # We gebruiken Quay.io curl image (veilig, geen hub limits)
         image: quay.io/curl/curl:8.4.0
         command: ["/bin/sh", "/scripts/init_routes.sh"]
         volumeMounts:
