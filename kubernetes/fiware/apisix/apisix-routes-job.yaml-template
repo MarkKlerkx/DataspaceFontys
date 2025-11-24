@@ -8,7 +8,7 @@ data:
     #!/bin/sh
     ADMIN_URL="http://apisix-admin:9180/apisix/admin/routes"
     ADMIN_KEY="iaB7npvHkpztst7qZ3Mt0JjECXgCcLFw"
-    HOST_DOMAIN="mp-data-service.INTERNAL_IP.nip.io"
+    HOST_DOMAIN="mp-data-service.192.168.165.211.nip.io"
 
     echo "--- Importing Routes ---"
 
@@ -28,6 +28,7 @@ data:
       "uri": "/.well-known/openid-configuration",
       "name": "openid-config-route",
       "host": "$HOST_DOMAIN",
+      "status": 1,
       "plugins": {
         "proxy-rewrite": { "uri": "/services/data-service/.well-known/openid-configuration" }
       },
@@ -43,6 +44,7 @@ data:
       "uri": "/.well-known/data-space-configuration",
       "name": "dataspace-config-route",
       "host": "$HOST_DOMAIN",
+      "status": 1,
       "plugins": {
         "proxy-rewrite": { "uri": "/.well-known/data-space-configuration/data-space-configuration.json" },
         "response-rewrite": { "headers": { "set": { "content-type": "application/json" } } }
@@ -60,6 +62,7 @@ data:
       "name": "scorpio-catch-all",
       "host": "$HOST_DOMAIN",
       "priority": 0,
+      "status": 1,
       "plugins": {
         "openid-connect": {
           "bearer_only": true,
