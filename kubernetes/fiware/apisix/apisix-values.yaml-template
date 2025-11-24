@@ -1,21 +1,16 @@
-# -- Global Configuration --
 global:
   imageRegistry: ""
   security:
     allowInsecureImages: true
 
-# -- Core APISIX Configuration (Image, Admin, Plugins) --
 apisix:
   enabled: true
   image:
     repository: apache/apisix
     tag: 3.14.0-debian
-  
   deployment:
     mode: traditional
     replicas: 1
-
-  # Admin API settings (zitten WEL onder apisix)
   admin:
     enabled: true
     type: ClusterIP
@@ -26,7 +21,6 @@ apisix:
       secretName: apisix-admin-secret
       secretAdminKey: "admin-key"
       adminKey: "iaB7npvHkpztst7qZ3Mt0JjECXgCcLFw"
-
   plugins:
     - opa
     - openid-connect
@@ -37,12 +31,9 @@ apisix:
     - cors
     - key-auth
     - basic-auth
-    - prometheus # Belangrijk voor de stabiliteit
-
+    - prometheus
   enable_debug: true
 
-# -- Gateway Service Configuration --
-# Dit regelt de service 'apisix-gateway'
 gateway:
   type: ClusterIP
   http:
@@ -55,11 +46,42 @@ ingress:
   annotations:
     kubernetes.io/ingress.class: traefik
   hosts:
-    - host: mp-data-service.INTERNAL_IP.nip.io
+    - host: mp-data-service.192.168.165.211.nip.io
       paths:
         - "/"
 
-# -- Etcd Configuration --
+# OPA Sidecar Configuratie
+extraContainers:
+  - name: opa
+    image: openpolicyagent/opa:1.2.0
+    imagePullPolicy: IfNotPresent
+    ports:
+      - name: http
+        containerPort: 8181
+        protocol: TCP
+    args:
+      - "run"
+      - "--ignore=.*"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "--config-file=/config/opa.yaml"
+      - "--log-level=debug"
+      - "/policies"
+    volumeMounts:
+      - name: opa-config
+        mountPath: /config
+        readOnly: true
+      - name: opa-policies
+        mountPath: /policies
+        readOnly: true
+
+extraVolumes:
+  - name: opa-config
+    configMap:
+      name: opa-config
+  - name: opa-policies
+    configMap:
+      name: tpp-policy
 etcd:
   enabled: true
   fullnameOverride: provider-dsc-etcd
@@ -89,18 +111,8 @@ etcd:
     periodSeconds: 10
     timeoutSeconds: 5
     failureThreshold: 60
-  livenessProbe:
-    enabled: true
-    initialDelaySeconds: 60
-    periodSeconds: 30
-    timeoutSeconds: 10
-    failureThreshold: 5
-  readinessProbe:
-    enabled: true
-    initialDelaySeconds: 60
-    periodSeconds: 10
-    timeoutSeconds: 10
-    failureThreshold: 5
 
 ingress-controller:
+  enabled: false
+dashboard:
   enabled: false
