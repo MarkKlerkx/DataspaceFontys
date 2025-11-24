@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opa-config
+  namespace: provider
+data:
+  opa.yaml: |
+    services:
+      - name: odrl-pap
+        url: http://odrl-pap:8080/bundles/service/v1
+    
+    bundles:
+      policies:
+        service: odrl-pap
+        resource: policies.tar.gz
+        polling:
+          min_delay_seconds: 5
+          max_delay_seconds: 10
+      
+      methods:
+        service: odrl-pap
+        resource: methods.tar.gz
+        polling:
+          min_delay_seconds: 5
+          max_delay_seconds: 10
+      
+      data:
+        service: odrl-pap
+        resource: data.tar.gz
+        polling:
+          min_delay_seconds: 5
+          max_delay_seconds: 15
+    
+    default_decision: /policy/main/allow
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tpp-policy
+  namespace: provider
+data:
+  tpp.rego: |
+    package policy.main
+    default allow = false
