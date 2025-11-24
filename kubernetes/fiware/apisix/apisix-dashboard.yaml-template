@@ -30,10 +30,10 @@ ingress:
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: websecure 
   hosts:
-    - host: apisix-dashboard.192.168.165.211.nip.io
+    - host: apisix-dashboard.INTERNAL_IP.nip.io
       paths:
         - "/"
   # tls:
   #  - secretName: provider-dsc-apisix-control-plane-tls
   #    hosts:
-  #      - apisix-dashboard.192.168.165.211.nip.io
+  #      - apisix-dashboard.INTERNAL_IP.nip.io
