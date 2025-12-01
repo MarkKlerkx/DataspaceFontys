@@ -2,7 +2,7 @@
 set -e
 
 # ==============================================================================
-# FIWARE INSTALLER - INTERACTIVE & ROBUST (V6)
+# FIWARE INSTALLER - STABLE K3S INIT (V7)
 # ==============================================================================
 
 # --- DETECT REAL USER ---
@@ -17,7 +17,7 @@ fi
 LOG_FILE="$(pwd)/install_fiware.log"
 exec > >(tee -i "$LOG_FILE") 2>&1
 
-# --- COLORS (High Visibility) ---
+# --- COLORS ---
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[1;36m' # Light Cyan
@@ -31,7 +31,7 @@ log_warn() { echo -e "${RED}[WARN]${NC} $1"; }
 # ==============================================================================
 # 1. PREPARATION & INPUT
 # ==============================================================================
-echo -e "${BLUE}[INIT] Installing dependencies (jq, curl, git)...${NC}"
+echo -e "${BLUE}[INIT] Installing dependencies...${NC}"
 sudo apt-get update > /dev/null 2>&1
 sudo apt-get install -y curl jq inetutils-ping git default-jdk > /dev/null 2>&1
 
@@ -40,21 +40,16 @@ echo -e "${YELLOW}##############################################################
 echo -e "${YELLOW}#                  DOCKER HUB AUTHENTICATION                   #${NC}"
 echo -e "${YELLOW}################################################################${NC}"
 echo -e "${BLUE}Please enter your Docker Hub credentials.${NC}"
-echo -e "${BLUE}These are required to prevent '429 Too Many Requests' errors.${NC}"
 echo ""
 
-# --- INPUT SECTION ---
 if [ -t 0 ]; then
-    # Username
     echo -e -n "Docker Username : ${YELLOW}"
     read MY_DOCKER_USER
     
-    # Password (Hidden)
     echo -e -n "${NC}Docker Token/PWD: ${YELLOW}"
     read -s MY_DOCKER_PASS
-    echo "" # Newline
+    echo "" 
     
-    # Feedback on password length
     if [ -n "$MY_DOCKER_PASS" ]; then
         echo -e "${GREEN}  -> Input received (${#MY_DOCKER_PASS} characters).${NC}"
     else
@@ -62,7 +57,6 @@ if [ -t 0 ]; then
         exit 1
     fi
 
-    # Email
     echo -e -n "${NC}Docker Email    : ${YELLOW}"
     read MY_DOCKER_EMAIL
     echo -e "${NC}"
@@ -72,33 +66,25 @@ else
 fi
 
 # --- VALIDATION ---
-echo -e "${BLUE}[CHECK] Verifying credentials with Docker Hub API...${NC}"
+echo -e "${BLUE}[CHECK] Verifying credentials...${NC}"
 LOGIN_RESPONSE=$(curl -s -H "Content-Type: application/json" -X POST -d '{"username": "'${MY_DOCKER_USER}'", "password": "'${MY_DOCKER_PASS}'"}' https://hub.docker.com/v2/users/login)
 HUB_TOKEN=$(echo $LOGIN_RESPONSE | jq -r .token)
 
 if [ "$HUB_TOKEN" != "null" ] && [ -n "$HUB_TOKEN" ]; then
-    log_success "Credentials Validated! Starting installation..."
+    log_success "Credentials Validated!"
 else
     echo -e "${RED}[ERROR] Login Failed!${NC}"
-    echo "Docker Hub says: $LOGIN_RESPONSE"
+    echo "Response: $LOGIN_RESPONSE"
     exit 1
 fi
 
 # ==============================================================================
-# 2. K3S INSTALLATION & REGISTRY CONFIG
+# 2. K3S INSTALLATION (OPTIMIZED ORDER)
 # ==============================================================================
 echo -e "${BLUE}--- STEP 1: K3S INSTALLATION ---${NC}"
 
-if ! command -v k3s &> /dev/null; then
-    curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--write-kubeconfig-mode 644" sh -
-else
-    log_info "K3s already installed."
-fi
-
-# --- GLOBAL REGISTRY CONFIG (THE FIX) ---
-echo -e "${BLUE}--- STEP 1.5: CONFIGURING GLOBAL REGISTRY AUTH ---${NC}"
-log_info "Creating /etc/rancher/k3s/registries.yaml..."
-
+# A. PRE-CONFIGURE REGISTRY (Avoids restart issues)
+echo -e "${BLUE}[CONFIG] Pre-configuring Registry Auth...${NC}"
 sudo mkdir -p /etc/rancher/k3s
 sudo cat <<EOF > /etc/rancher/k3s/registries.yaml
 configs:
@@ -108,23 +94,40 @@ configs:
       password: "$MY_DOCKER_PASS"
 EOF
 
-log_info "Restarting K3s to apply credentials..."
-sudo systemctl restart k3s
+# B. INSTALL K3S
+if ! command -v k3s &> /dev/null; then
+    log_info "Installing K3s (This may take a moment)..."
+    # We install with the config already in place, so no restart needed!
+    curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--write-kubeconfig-mode 644" sh -
+else
+    log_info "K3s already installed."
+fi
 
-# Configure User Access
+# C. USER ACCESS
+log_info "Configuring access for user: $REAL_USER"
 mkdir -p "$REAL_HOME/.kube"
+
+# Wait loop for the config file to appear (max 30 sec)
+for i in {1..30}; do
+    if [ -f /etc/rancher/k3s/k3s.yaml ]; then
+        break
+    fi
+    sleep 1
+done
+
 cp /etc/rancher/k3s/k3s.yaml "$REAL_HOME/.kube/config"
 chown -R "$REAL_USER:$REAL_USER" "$REAL_HOME/.kube"
 chmod 600 "$REAL_HOME/.kube/config"
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-log_info "Waiting for K3s to be ready..."
+log_info "Waiting for K3s Node to be Ready..."
 for i in {1..60}; do
-    if kubectl get pods -n kube-system | grep "local-path" | grep -q "Running"; then
-        log_success "K3s Ready."
+    if kubectl get nodes | grep -q "Ready"; then
+        log_success "K3s is Up & Running."
         break
     fi
-    sleep 5
+    echo -n "."
+    sleep 2
 done
 
 # ==============================================================================
@@ -138,7 +141,7 @@ fi
 mkdir -p /fiware/scripts /fiware/trust-anchor /fiware/consumer /fiware/provider /fiware/wallet-identity
 chown -R "$REAL_USER:$REAL_USER" /fiware
 
-# Function to setup namespace secrets (Legacy support for Helm charts ignoring global config)
+# Helper for Legacy Namespace Secrets (Safety net)
 setup_namespace_secrets() {
     local ns=$1
     kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f -
@@ -275,7 +278,6 @@ curl -X POST "http://til-provider.${INTERNAL_IP}.nip.io/issuer" --header 'Conten
 echo -e "${BLUE}--- STEP 6: WALLET ---${NC}"
 mkdir -p /fiware/wallet-identity
 chmod o+rw /fiware/wallet-identity
-# Ensure image is pulled using global credentials
 sudo k3s crictl pull quay.io/wi_stefan/did-helper:0.1.1 || true
 sudo k3s ctr run --rm --mount type=bind,src=/fiware/wallet-identity,dst=/cert,options=rbind quay.io/wi_stefan/did-helper:0.1.1 did-helper-wallet-job
 chmod -R o+rw /fiware/wallet-identity/private-key.pem
