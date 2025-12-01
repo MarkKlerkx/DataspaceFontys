@@ -9,13 +9,13 @@
 # ==============================================================================
 
 # --- 1. SETUP LOGGING ---
-# Log alles naar install_fiware.log in dezelfde map, maar toon het ook op scherm.
+# Log everything to install_fiware.log in the current directory, while showing it on screen.
 LOG_FILE="$(pwd)/install_fiware.log"
 if [ ! -f "$LOG_FILE" ]; then touch "$LOG_FILE"; fi
 exec > >(tee -i "$LOG_FILE") 2>&1
 
 echo "=========================================================="
-echo " LOGGING ENABLED: Output wordt bewaard in:"
+echo " LOGGING ENABLED: Output saved to:"
 echo " $LOG_FILE"
 echo "=========================================================="
 
@@ -40,27 +40,28 @@ check_command() { if ! command -v "$1" &> /dev/null; then return 1; else return 
 
 wait_for_pods() {
     local namespace=$1
-    log_info "Wachten tot pods in '$namespace' gestart zijn (max 5 min)..."
-    sudo kubectl wait --for=condition=ready pod --all -n "$namespace" --timeout=300s || log_warn "Doorgaan (sommige pods starten nog)..."
+    log_info "Waiting for pods in '$namespace' to be ready (max 5 min)..."
+    sudo kubectl wait --for=condition=ready pod --all -n "$namespace" --timeout=300s || log_warn "Proceeding (some pods are still starting)..."
 }
 
 fix_stuck_storage() {
     local ns=$1
     if sudo kubectl get pvc -n "$ns" 2>/dev/null | grep -q "Pending"; then
-        log_warn "Storage Deadlock gedetecteerd in '$ns'. Auto-fix gestart..."
+        log_warn "Storage Deadlock detected in '$ns'. Starting auto-fix..."
         sudo kubectl rollout restart deployment local-path-provisioner -n kube-system
         sleep 10
+        # Delete pending claims so they re-bind
         sudo kubectl get pvc -n "$ns" | grep Pending | awk '{print $1}' | xargs -r sudo kubectl delete pvc -n "$ns"
-        log_success "Opslag reset uitgevoerd."
+        log_success "Storage reset complete."
     fi
 }
 
-# --- NIEUWE FUNCTIE: Docker Auth Toepassen ---
+# --- NEW FUNCTION: Apply Docker Auth ---
 apply_docker_secret() {
     local ns=$1
     if [ "$USE_DOCKER_AUTH" = true ]; then
-        log_info "Docker Credentials toepassen op namespace '$ns'..."
-        # 1. Maak de secret aan (onderdruk foutmelding als hij al bestaat)
+        log_info "Applying Docker Credentials to namespace '$ns'..."
+        # 1. Create the secret (suppress error if exists)
         sudo kubectl create secret docker-registry regcred \
           --docker-server=https://index.docker.io/v1/ \
           --docker-username="$DOCKER_USER" \
@@ -68,44 +69,44 @@ apply_docker_secret() {
           --docker-email="$DOCKER_EMAIL" \
           -n "$ns" --dry-run=client -o yaml | sudo kubectl apply -f -
         
-        # 2. Patch de default serviceaccount zodat pods de secret gebruiken
+        # 2. Patch default serviceaccount
         sudo kubectl patch serviceaccount default -p '{"imagePullSecrets": [{"name": "regcred"}]}' -n "$ns"
-        log_success "Docker authenticatie actief voor '$ns'."
+        log_success "Docker authentication active for '$ns'."
     fi
 }
 
 # ==============================================================================
-# INPUT STAP: DOCKER HUB CREDENTIALS
+# INPUT STEP: DOCKER HUB CREDENTIALS
 # ==============================================================================
-echo -e "${YELLOW}--- DOCKER HUB CONFIGURATIE ---${NC}"
-echo "Om 'ImagePullBackOff' (rate limits) te voorkomen, kun je inloggen met Docker Hub."
-# Gebruik /dev/tty om input te lezen ondanks de output redirection
-read -p "Wil je Docker Hub credentials gebruiken? (y/n): " -r RESPONSE < /dev/tty
+echo -e "${YELLOW}--- DOCKER HUB CONFIGURATION ---${NC}"
+echo "To prevent 'ImagePullBackOff' (rate limits), you can login with Docker Hub."
+# Use /dev/tty to read input despite output redirection
+read -p "Do you want to use Docker Hub credentials? (y/n): " -r RESPONSE < /dev/tty
 if [[ "$RESPONSE" =~ ^([yY][eE][sS]|[yY])+$ ]]; then
     USE_DOCKER_AUTH=true
     echo ""
     read -p "Docker Username: " -r DOCKER_USER < /dev/tty
-    read -p "Docker Access Token (of wachtwoord): " -r DOCKER_PASS < /dev/tty
+    read -p "Docker Access Token (or password): " -r DOCKER_PASS < /dev/tty
     read -p "Docker Email: " -r DOCKER_EMAIL < /dev/tty
     echo ""
-    log_info "Credentials opgeslagen. Ze worden toegepast zodra de namespaces zijn aangemaakt."
+    log_info "Credentials saved. They will be applied once namespaces are created."
 else
-    log_warn "Geen credentials opgegeven. Je loopt risico op download-limieten (100 pulls/6u)."
+    log_warn "No credentials provided. You risk hitting download limits (100 pulls/6h)."
 fi
 
 # ==============================================================================
 # 1. OS PREPARATION
 # ==============================================================================
-echo -e "${YELLOW}--- STAP 1: VOORBEREIDING ---${NC}"
+echo -e "${YELLOW}--- STEP 1: OS PREPARATION ---${NC}"
 sudo apt-get update && sudo apt-get upgrade -y
 sudo apt-get install -y inetutils-ping git jq default-jdk curl
 
 # ==============================================================================
-# 2. K3S INSTALLATIE
+# 2. K3S INSTALLATION
 # ==============================================================================
-echo -e "${YELLOW}--- STAP 2: K3S INSTALLATIE ---${NC}"
+echo -e "${YELLOW}--- STEP 2: K3S INSTALLATION ---${NC}"
 if check_command "k3s"; then
-    log_info "K3s is al geïnstalleerd."
+    log_info "K3s is already installed."
 else
     curl -sfL https://get.k3s.io | sh -
 fi
@@ -120,14 +121,14 @@ sudo cp /etc/rancher/k3s/k3s.yaml "$HOME/.kube/config"
 sudo chown $(id -u):$(id -g) "$HOME/.kube/config"
 sudo chmod 644 /etc/rancher/k3s/k3s.yaml
 
-log_info "Controleren Storage Provisioner..."
+log_info "Checking Storage Provisioner..."
 sudo kubectl rollout restart deployment local-path-provisioner -n kube-system
 sudo kubectl rollout status deployment local-path-provisioner -n kube-system --timeout=60s
 
 # ==============================================================================
 # 3. HELM & HEADLAMP
 # ==============================================================================
-echo -e "${YELLOW}--- STAP 3: HELM & HEADLAMP ---${NC}"
+echo -e "${YELLOW}--- STEP 3: HELM & HEADLAMP ---${NC}"
 if ! check_command "helm"; then
     curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 fi
@@ -141,9 +142,9 @@ helm upgrade --install my-headlamp headlamp/headlamp --namespace kube-system --c
 sudo kubectl patch service my-headlamp -n kube-system -p '{"spec":{"type":"NodePort"}}'
 
 # ==============================================================================
-# 4. CONFIGURATIE & VARIABELEN
+# 4. CONFIGURATION & VARIABLES
 # ==============================================================================
-echo -e "${YELLOW}--- STAP 4: CONFIGURATIE ---${NC}"
+echo -e "${YELLOW}--- STEP 4: CONFIGURATION ---${NC}"
 export INTERNAL_IP=$(ip route get 1.1.1.1 | awk '{print $7}')
 mkdir -p /fiware/scripts
 wget -qO /fiware/scripts/get_credential.sh https://raw.githubusercontent.com/wistefan/deployment-demo/main/scripts/get_credential.sh
@@ -167,7 +168,7 @@ refresh_demo_tokens() {
   if [ -n "\$USER_CREDENTIAL_PROVIDER" ]; then
       export PROVIDER_ACCESS_TOKEN=\$(/fiware/scripts/get_access_token_oid4vp.sh http://mp-data-service.\${INTERNAL_IP}.nip.io "\$USER_CREDENTIAL_PROVIDER" default || echo "")
   fi
-  echo "Tokens ververst."
+  echo "Tokens refreshed."
 }
 EOF
 fi
@@ -176,7 +177,7 @@ source "$HOME/.bashrc"
 # ==============================================================================
 # 5. TRUST ANCHOR
 # ==============================================================================
-echo -e "${YELLOW}--- STAP 5: TRUST ANCHOR ---${NC}"
+echo -e "${YELLOW}--- STEP 5: TRUST ANCHOR ---${NC}"
 helm repo add data-space-connector https://fiware.github.io/data-space-connector/
 helm repo update
 mkdir -p /fiware/trust-anchor
@@ -196,7 +197,7 @@ wait_for_pods "trust-anchor"
 # ==============================================================================
 # 6. CONSUMER
 # ==============================================================================
-echo -e "${YELLOW}--- STAP 6: CONSUMER ---${NC}"
+echo -e "${YELLOW}--- STEP 6: CONSUMER ---${NC}"
 mkdir -p /fiware/consumer-identity
 cd /fiware/consumer-identity
 openssl ecparam -name prime256v1 -genkey -noout -out private-key.pem
@@ -228,7 +229,7 @@ curl -X POST "http://til.${INTERNAL_IP}.nip.io/issuer" --header 'Content-Type: a
 # ==============================================================================
 # 7. PROVIDER & APISIX
 # ==============================================================================
-echo -e "${YELLOW}--- STAP 7: PROVIDER & APISIX ---${NC}"
+echo -e "${YELLOW}--- STEP 7: PROVIDER & APISIX ---${NC}"
 mkdir -p /fiware/provider-identity
 cd /fiware/provider-identity
 openssl ecparam -name prime256v1 -genkey -noout -out private-key.pem
@@ -250,7 +251,7 @@ sed -e "s|DID_PROVIDER|$PROVIDER_DID|g" -e "s|DID_CONSUMER|$CONSUMER_DID|g" -e "
 
 helm upgrade --install provider-dsc data-space-connector/data-space-connector --version 8.2.22 -f /fiware/provider/values.yaml --namespace provider
 
-log_info "Provider Storage controleren..."
+log_info "Checking Provider Storage stability..."
 sleep 20
 fix_stuck_storage "provider"
 wait_for_pods "provider"
@@ -286,7 +287,7 @@ curl -X POST "http://til-provider.${INTERNAL_IP}.nip.io/issuer" --header 'Conten
 # ==============================================================================
 # 8. WALLET & DATA
 # ==============================================================================
-echo -e "${YELLOW}--- STAP 8: WALLET & DEMO DATA ---${NC}"
+echo -e "${YELLOW}--- STEP 8: WALLET & DEMO DATA ---${NC}"
 mkdir -p /fiware/wallet-identity
 sudo chmod o+rw /fiware/wallet-identity
 sudo k3s ctr images pull quay.io/wi_stefan/did-helper:0.1.1
@@ -302,6 +303,6 @@ sleep 5
 curl -s -X POST "http://localhost:9090/ngsi-ld/v1/entities/" --header 'Content-Type: application/ld+json' --data-raw '{"id":"urn:ngsi-ld:EnergyReport:001","type":"EnergyReport","consumption":{"type":"Property","value":150.5,"unitCode":"KWH"},"@context":["https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld"]}'
 kill $PF_PID
 
-log_success "INSTALLATIE VOLTOOID!"
-echo "Logbestand bewaard in: $LOG_FILE"
+log_success "INSTALLATION COMPLETE!"
+echo "Log file saved to: $LOG_FILE"
 echo "Refresh tokens with: source ~/.bashrc && refresh_demo_tokens"
