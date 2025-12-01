@@ -2,16 +2,7 @@
 set -e
 
 # ==============================================================================
-# FIWARE INSTALLER - HARDCODED CREDENTIALS (V5 - RATE LIMIT FIX)
-# ==============================================================================
-
-# ### INVULLEN: VUL HIER JE GEGEVENS IN ###
-MY_DOCKER_USER="jouw_docker_username_hier"
-MY_DOCKER_PASS="jouw_docker_token_hier"
-MY_DOCKER_EMAIL="jouw_email@voorbeeld.com"
-
-# ==============================================================================
-# SCRIPT START
+# FIWARE INSTALLER - INTERACTIVE & ROBUST (V6)
 # ==============================================================================
 
 # --- DETECT REAL USER ---
@@ -26,10 +17,10 @@ fi
 LOG_FILE="$(pwd)/install_fiware.log"
 exec > >(tee -i "$LOG_FILE") 2>&1
 
-# Colors (Light Blue for visibility)
+# --- COLORS (High Visibility) ---
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-BLUE='\033[1;36m' 
+BLUE='\033[1;36m' # Light Cyan
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
@@ -37,37 +28,77 @@ log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 log_warn() { echo -e "${RED}[WARN]${NC} $1"; }
 
-# 1. INSTALL DEPENDENCIES & VALIDATE
-echo -e "${BLUE}[INIT] Installing dependencies...${NC}"
+# ==============================================================================
+# 1. PREPARATION & INPUT
+# ==============================================================================
+echo -e "${BLUE}[INIT] Installing dependencies (jq, curl, git)...${NC}"
 sudo apt-get update > /dev/null 2>&1
 sudo apt-get install -y curl jq inetutils-ping git default-jdk > /dev/null 2>&1
 
-echo -e "${BLUE}[CHECK] Validating Docker Hub Credentials for user: ${YELLOW}$MY_DOCKER_USER${NC}..."
+clear
+echo -e "${YELLOW}################################################################${NC}"
+echo -e "${YELLOW}#                  DOCKER HUB AUTHENTICATION                   #${NC}"
+echo -e "${YELLOW}################################################################${NC}"
+echo -e "${BLUE}Please enter your Docker Hub credentials.${NC}"
+echo -e "${BLUE}These are required to prevent '429 Too Many Requests' errors.${NC}"
+echo ""
 
+# --- INPUT SECTION ---
+if [ -t 0 ]; then
+    # Username
+    echo -e -n "Docker Username : ${YELLOW}"
+    read MY_DOCKER_USER
+    
+    # Password (Hidden)
+    echo -e -n "${NC}Docker Token/PWD: ${YELLOW}"
+    read -s MY_DOCKER_PASS
+    echo "" # Newline
+    
+    # Feedback on password length
+    if [ -n "$MY_DOCKER_PASS" ]; then
+        echo -e "${GREEN}  -> Input received (${#MY_DOCKER_PASS} characters).${NC}"
+    else
+        echo -e "${RED}  -> No input received!${NC}"
+        exit 1
+    fi
+
+    # Email
+    echo -e -n "${NC}Docker Email    : ${YELLOW}"
+    read MY_DOCKER_EMAIL
+    echo -e "${NC}"
+else
+    echo -e "${RED}[ERROR] Script must be run interactively!${NC}"
+    exit 1
+fi
+
+# --- VALIDATION ---
+echo -e "${BLUE}[CHECK] Verifying credentials with Docker Hub API...${NC}"
 LOGIN_RESPONSE=$(curl -s -H "Content-Type: application/json" -X POST -d '{"username": "'${MY_DOCKER_USER}'", "password": "'${MY_DOCKER_PASS}'"}' https://hub.docker.com/v2/users/login)
 HUB_TOKEN=$(echo $LOGIN_RESPONSE | jq -r .token)
 
 if [ "$HUB_TOKEN" != "null" ] && [ -n "$HUB_TOKEN" ]; then
-    log_success "Login Successful! Check passed."
+    log_success "Credentials Validated! Starting installation..."
 else
-    echo -e "${RED}[ERROR] Login mislukt!${NC}"
-    echo "Check je credentials in het script. Docker response: $LOGIN_RESPONSE"
+    echo -e "${RED}[ERROR] Login Failed!${NC}"
+    echo "Docker Hub says: $LOGIN_RESPONSE"
     exit 1
 fi
 
-# 2. K3S INSTALLATION
+# ==============================================================================
+# 2. K3S INSTALLATION & REGISTRY CONFIG
+# ==============================================================================
 echo -e "${BLUE}--- STEP 1: K3S INSTALLATION ---${NC}"
+
 if ! command -v k3s &> /dev/null; then
     curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--write-kubeconfig-mode 644" sh -
 else
     log_info "K3s already installed."
 fi
 
-# 2.5 CONFIGURE GLOBAL REGISTRY AUTH (THE FIX)
+# --- GLOBAL REGISTRY CONFIG (THE FIX) ---
 echo -e "${BLUE}--- STEP 1.5: CONFIGURING GLOBAL REGISTRY AUTH ---${NC}"
-log_info "Writing registries.yaml to prevent Rate Limiting (429)..."
+log_info "Creating /etc/rancher/k3s/registries.yaml..."
 
-# Create the registries.yaml file to force authentication for ALL pulls
 sudo mkdir -p /etc/rancher/k3s
 sudo cat <<EOF > /etc/rancher/k3s/registries.yaml
 configs:
@@ -77,26 +108,28 @@ configs:
       password: "$MY_DOCKER_PASS"
 EOF
 
-log_info "Restarting K3s to apply registry credentials..."
+log_info "Restarting K3s to apply credentials..."
 sudo systemctl restart k3s
 
-# Configure kubeconfig for User
+# Configure User Access
 mkdir -p "$REAL_HOME/.kube"
 cp /etc/rancher/k3s/k3s.yaml "$REAL_HOME/.kube/config"
 chown -R "$REAL_USER:$REAL_USER" "$REAL_HOME/.kube"
 chmod 600 "$REAL_HOME/.kube/config"
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-log_info "Waiting for K3s to restart..."
+log_info "Waiting for K3s to be ready..."
 for i in {1..60}; do
     if kubectl get pods -n kube-system | grep "local-path" | grep -q "Running"; then
-        log_success "K3s is Ready & Authenticated."
+        log_success "K3s Ready."
         break
     fi
     sleep 5
 done
 
+# ==============================================================================
 # 3. HELM & HEADLAMP
+# ==============================================================================
 echo -e "${BLUE}--- STEP 2: HELM & HEADLAMP ---${NC}"
 if ! command -v helm &> /dev/null; then
     curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
@@ -105,12 +138,28 @@ fi
 mkdir -p /fiware/scripts /fiware/trust-anchor /fiware/consumer /fiware/provider /fiware/wallet-identity
 chown -R "$REAL_USER:$REAL_USER" /fiware
 
+# Function to setup namespace secrets (Legacy support for Helm charts ignoring global config)
+setup_namespace_secrets() {
+    local ns=$1
+    kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f -
+    kubectl create secret docker-registry regcred \
+      --docker-server=https://index.docker.io/v1/ \
+      --docker-username="$MY_DOCKER_USER" \
+      --docker-password="$MY_DOCKER_PASS" \
+      --docker-email="$MY_DOCKER_EMAIL" \
+      -n "$ns" --dry-run=client -o yaml | kubectl apply -f -
+    kubectl patch serviceaccount default -p '{"imagePullSecrets": [{"name": "regcred"}]}' -n "$ns"
+}
+
+setup_namespace_secrets "kube-system"
 helm repo add headlamp https://kubernetes-sigs.github.io/headlamp/
 helm repo update
 helm upgrade --install my-headlamp headlamp/headlamp --namespace kube-system --create-namespace
 kubectl patch service my-headlamp -n kube-system -p '{"spec":{"type":"NodePort"}}'
 
+# ==============================================================================
 # 4. SCRIPTS
+# ==============================================================================
 export INTERNAL_IP=$(ip route get 1.1.1.1 | awk '{print $7}')
 wget -qO /fiware/scripts/get_credential.sh https://raw.githubusercontent.com/wistefan/deployment-demo/main/scripts/get_credential.sh
 wget -qO /fiware/scripts/get_access_token_oid4vp.sh https://raw.githubusercontent.com/wistefan/deployment-demo/main/scripts/get_access_token_oid4vp.sh
@@ -139,11 +188,11 @@ refresh_demo_tokens() {
 EOF
 fi
 
+# ==============================================================================
 # 5. TRUST ANCHOR
+# ==============================================================================
 echo -e "${BLUE}--- STEP 3: TRUST ANCHOR ---${NC}"
-# Setup NS manually (Secrets are now handled globally via registries.yaml)
-kubectl create namespace trust-anchor --dry-run=client -o yaml | kubectl apply -f -
-
+setup_namespace_secrets "trust-anchor"
 helm repo add data-space-connector https://fiware.github.io/data-space-connector/
 helm repo update
 wget -qO /fiware/trust-anchor/values.yaml-template https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/trust-anchor/values.yaml-template
@@ -151,9 +200,11 @@ sed "s|INTERNAL_IP|$INTERNAL_IP|g" /fiware/trust-anchor/values.yaml-template > /
 helm upgrade --install trust-anchor data-space-connector/trust-anchor --version 0.2.1 -f /fiware/trust-anchor/values.yaml --namespace trust-anchor
 kubectl wait --for=condition=ready pod --all -n trust-anchor --timeout=300s
 
+# ==============================================================================
 # 6. CONSUMER
+# ==============================================================================
 echo -e "${BLUE}--- STEP 4: CONSUMER ---${NC}"
-kubectl create namespace consumer --dry-run=client -o yaml | kubectl apply -f -
+setup_namespace_secrets "consumer"
 cd /fiware/consumer
 mkdir -p /fiware/consumer-identity && cd /fiware/consumer-identity
 openssl ecparam -name prime256v1 -genkey -noout -out private-key.pem
@@ -164,7 +215,6 @@ wget -q https://github.com/wistefan/did-helper/releases/download/0.1.1/did-helpe
 ./did-helper -keystorePath cert.pfx -keystorePassword=test -outputFile did.json
 export CONSUMER_DID=$(cat did.json | jq .id -r)
 chown -R "$REAL_USER:$REAL_USER" /fiware/consumer-identity
-
 kubectl create secret generic consumer-identity --from-file=/fiware/consumer-identity/cert.pfx -n consumer --dry-run=client -o yaml | kubectl apply -f -
 wget -qO /fiware/consumer/values.yaml-template https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/consumer/values.yaml-template
 sed -e "s|DID_CONSUMER|$CONSUMER_DID|g" -e "s|INTERNAL_IP|$INTERNAL_IP|g" /fiware/consumer/values.yaml-template > /fiware/consumer/values.yaml
@@ -172,11 +222,13 @@ helm upgrade --install consumer-dsc data-space-connector/data-space-connector --
 kubectl wait --for=condition=ready pod --all -n consumer --timeout=300s
 curl -X POST "http://til.${INTERNAL_IP}.nip.io/issuer" --header 'Content-Type: application/json' --data "{\"did\": \"$CONSUMER_DID\", \"credentials\": []}" || true
 
+# ==============================================================================
 # 7. PROVIDER
+# ==============================================================================
 echo -e "${BLUE}--- STEP 5: PROVIDER ---${NC}"
-kubectl create namespace provider --dry-run=client -o yaml | kubectl apply -f -
-# We still patch Postgres SA just in case chart overrides something, but Global Auth should handle it
+setup_namespace_secrets "provider"
 kubectl create serviceaccount postgresql -n provider --dry-run=client -o yaml | kubectl apply -f -
+kubectl patch serviceaccount postgresql -p '{"imagePullSecrets": [{"name": "regcred"}]}' -n provider
 
 mkdir -p /fiware/provider-identity && cd /fiware/provider-identity
 openssl ecparam -name prime256v1 -genkey -noout -out private-key.pem
@@ -217,16 +269,20 @@ sleep 2
 curl -X POST "http://til-provider.${INTERNAL_IP}.nip.io/issuer" --header 'Content-Type: application/json' --data "{\"did\": \"$CONSUMER_DID\", \"credentials\": [{\"credentialsType\": \"UserCredential\"}]}"
 curl -X POST "http://til-provider.${INTERNAL_IP}.nip.io/issuer" --header 'Content-Type: application/json' --data "{\"did\": \"$PROVIDER_DID\", \"credentials\": [{\"credentialsType\": \"UserCredential\"}]}"
 
+# ==============================================================================
 # 8. WALLET
+# ==============================================================================
 echo -e "${BLUE}--- STEP 6: WALLET ---${NC}"
 mkdir -p /fiware/wallet-identity
 chmod o+rw /fiware/wallet-identity
-# Manual pull now leverages the global auth config
+# Ensure image is pulled using global credentials
 sudo k3s crictl pull quay.io/wi_stefan/did-helper:0.1.1 || true
 sudo k3s ctr run --rm --mount type=bind,src=/fiware/wallet-identity,dst=/cert,options=rbind quay.io/wi_stefan/did-helper:0.1.1 did-helper-wallet-job
 chmod -R o+rw /fiware/wallet-identity/private-key.pem
 
+# ==============================================================================
 # 9. DATA
+# ==============================================================================
 echo -e "${BLUE}--- STEP 7: DEMO DATA ---${NC}"
 sleep 5
 curl -s -X 'POST' "http://pap-provider.${INTERNAL_IP}.nip.io/policy" -H 'Content-Type: application/json' -d '{"@context":{"odrl":"http://www.w3.org/ns/odrl/2/"},"@type":"odrl:Policy","odrl:permission":{"odrl:assignee":{"@id":"vc:any"},"odrl:action":{"@id":"odrl:read"}}}'
@@ -236,7 +292,9 @@ sleep 5
 curl -s -X POST "http://localhost:9090/ngsi-ld/v1/entities/" --header 'Content-Type: application/ld+json' --data-raw '{"id":"urn:ngsi-ld:EnergyReport:001","type":"EnergyReport","consumption":{"type":"Property","value":150.5,"unitCode":"KWH"},"@context":["https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld"]}'
 kill $PF_PID
 
+# ==============================================================================
 # 10. COMPLETION
+# ==============================================================================
 HEADLAMP_PORT=$(kubectl get service -n kube-system my-headlamp -o jsonpath='{.spec.ports[0].nodePort}')
 HEADLAMP_TOKEN=$(kubectl create token my-headlamp --namespace kube-system)
 KC_CONSUMER_PASS=$(kubectl get secret issuance-secret -n consumer -o jsonpath='{.data.keycloak-admin}' | base64 --decode)
