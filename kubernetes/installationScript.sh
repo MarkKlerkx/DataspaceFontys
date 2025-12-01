@@ -2,7 +2,7 @@
 set -e
 
 # ==============================================================================
-# FIWARE INSTALLER - HELM CONFLICT FIX (V9)
+# FIWARE INSTALLER - IGNORE JOB ERRORS (V12)
 # ==============================================================================
 
 # --- DETECT REAL USER ---
@@ -26,7 +26,51 @@ NC='\033[0m'
 
 log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
-log_warn() { echo -e "${RED}[WARN]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# --- SMART WAIT FUNCTION (V12 - TOLERANT MODE) ---
+wait_for_ready() {
+    local NAMESPACE=$1
+    local TIMEOUT_SECS=$2
+    local START_TIME=$(date +%s)
+    
+    echo -e "${BLUE}[WAIT] Watching namespace '$NAMESPACE' (Ignoring failed Job retries)...${NC}"
+
+    while true; do
+        local CURRENT_TIME=$(date +%s)
+        local ELAPSED=$((CURRENT_TIME - START_TIME))
+        if [ $ELAPSED -gt $TIMEOUT_SECS ]; then
+            log_error "Timeout reached for '$NAMESPACE'!"
+            kubectl get pods -n $NAMESPACE
+            return 1
+        fi
+
+        # V12 CHANGE: We ignore 'Error' status because Jobs leave them behind.
+        # We only count pods that are actively trying to start but failing/waiting.
+        # Filter excludes: Running, Completed, Error.
+        local PENDING_PODS=$(kubectl get pods -n $NAMESPACE --no-headers | grep -v -E "Running|Completed|Error" | wc -l)
+        
+        # Check for active issues we DO care about (CrashLoop means it keeps trying and failing)
+        if kubectl get pods -n $NAMESPACE --no-headers | grep -q -E "CrashLoopBackOff|ErrImagePull|ImagePullBackOff"; then
+             echo -e "${YELLOW}  -> Warning: Some pods are struggling (CrashLoop/ImagePull)...${NC}"
+        fi
+
+        # SUCCESS CONDITION
+        if [ "$PENDING_PODS" -eq 0 ]; then
+            # Verify we have at least SOME healthy pods (to avoid empty namespace success)
+            local HEALTHY_COUNT=$(kubectl get pods -n $NAMESPACE --no-headers | grep -E "Running|Completed" | wc -l)
+            if [ "$HEALTHY_COUNT" -gt 0 ]; then
+                log_success "Namespace '$NAMESPACE' looks stable ($HEALTHY_COUNT healthy pods)!"
+                return 0
+            fi
+        fi
+
+        echo -ne "  ... $ELAPSED seconds. Waiting for $PENDING_PODS pods to settle...\r"
+        sleep 10
+    done
+    echo ""
+}
 
 # ==============================================================================
 # 1. PREPARATION & INPUT
@@ -106,7 +150,6 @@ fi
 log_info "Configuring access for user: $REAL_USER"
 mkdir -p "$REAL_HOME/.kube"
 
-# Wait for config file
 for i in {1..30}; do
     if [ -f /etc/rancher/k3s/k3s.yaml ]; then
         break
@@ -119,10 +162,10 @@ chown -R "$REAL_USER:$REAL_USER" "$REAL_HOME/.kube"
 chmod 600 "$REAL_HOME/.kube/config"
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-log_info "Waiting for K3s Node to be Ready..."
+log_info "Waiting for K3s Node..."
 for i in {1..60}; do
     if kubectl get nodes 2>/dev/null | grep -q "Ready"; then
-        log_success "K3s is Up & Running."
+        log_success "K3s is Up."
         break
     fi
     echo -n "."
@@ -140,15 +183,10 @@ fi
 mkdir -p /fiware/scripts /fiware/trust-anchor /fiware/consumer /fiware/provider /fiware/wallet-identity
 chown -R "$REAL_USER:$REAL_USER" /fiware
 
-# Setup Secrets Function
+# Setup Secrets (Safety Net)
 setup_namespace_secrets() {
     local ns=$1
-    log_info "Setting up secrets for namespace: $ns"
-    
-    # Ensure Namespace Exists
     kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f -
-    
-    # Create Registry Secret (Safety net)
     kubectl create secret docker-registry regcred \
       --docker-server=https://index.docker.io/v1/ \
       --docker-username="$MY_DOCKER_USER" \
@@ -156,15 +194,12 @@ setup_namespace_secrets() {
       --docker-email="$MY_DOCKER_EMAIL" \
       -n "$ns" --dry-run=client -o yaml | kubectl apply -f -
     
-    # Wait for Default ServiceAccount
     for i in {1..30}; do
         if kubectl get serviceaccount default -n "$ns" > /dev/null 2>&1; then
             break
         fi
         sleep 2
     done
-
-    # Patch Default Only
     kubectl patch serviceaccount default -p '{"imagePullSecrets": [{"name": "regcred"}]}' -n "$ns"
 }
 
@@ -215,7 +250,8 @@ helm repo update
 wget -qO /fiware/trust-anchor/values.yaml-template https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/trust-anchor/values.yaml-template
 sed "s|INTERNAL_IP|$INTERNAL_IP|g" /fiware/trust-anchor/values.yaml-template > /fiware/trust-anchor/values.yaml
 helm upgrade --install trust-anchor data-space-connector/trust-anchor --version 0.2.1 -f /fiware/trust-anchor/values.yaml --namespace trust-anchor
-kubectl wait --for=condition=ready pod --all -n trust-anchor --timeout=300s
+
+wait_for_ready "trust-anchor" 600
 
 # ==============================================================================
 # 6. CONSUMER
@@ -236,7 +272,8 @@ kubectl create secret generic consumer-identity --from-file=/fiware/consumer-ide
 wget -qO /fiware/consumer/values.yaml-template https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/consumer/values.yaml-template
 sed -e "s|DID_CONSUMER|$CONSUMER_DID|g" -e "s|INTERNAL_IP|$INTERNAL_IP|g" /fiware/consumer/values.yaml-template > /fiware/consumer/values.yaml
 helm upgrade --install consumer-dsc data-space-connector/data-space-connector --version 8.2.22 -f /fiware/consumer/values.yaml --namespace consumer
-kubectl wait --for=condition=ready pod --all -n consumer --timeout=300s
+
+wait_for_ready "consumer" 600
 curl -X POST "http://til.${INTERNAL_IP}.nip.io/issuer" --header 'Content-Type: application/json' --data "{\"did\": \"$CONSUMER_DID\", \"credentials\": []}" || true
 
 # ==============================================================================
@@ -244,9 +281,6 @@ curl -X POST "http://til.${INTERNAL_IP}.nip.io/issuer" --header 'Content-Type: a
 # ==============================================================================
 echo -e "${BLUE}--- STEP 5: PROVIDER ---${NC}"
 setup_namespace_secrets "provider"
-
-# NOTE: Removed manual creation of 'postgresql' service account to prevent Helm conflicts.
-# The global registry config (Step 1) handles authentication for postgres images automatically.
 
 mkdir -p /fiware/provider-identity && cd /fiware/provider-identity
 openssl ecparam -name prime256v1 -genkey -noout -out private-key.pem
@@ -279,7 +313,10 @@ helm repo add apisix https://charts.apiseven.com
 helm repo update
 helm upgrade --install apisix apisix/apisix -f apisix-values.yaml -n provider
 helm upgrade --install apisix-dashboard apisix/apisix-dashboard -f apisix-dashboard.yaml -n provider
-kubectl wait --for=condition=ready pod --all -n provider --timeout=600s
+
+# USE SMART WAIT (Ignoring Job Errors)
+wait_for_ready "provider" 1200
+
 kubectl apply -f apisix-routes-job.yaml -n provider
 
 curl -X POST "http://til.${INTERNAL_IP}.nip.io/issuer" --header 'Content-Type: application/json' --data "{\"did\": \"$PROVIDER_DID\", \"credentials\": []}"
