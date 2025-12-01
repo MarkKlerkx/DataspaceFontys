@@ -2,11 +2,11 @@
 set -e # Exit immediately if a command exits with a non-zero status
 
 # ==============================================================================
-# FIWARE DATA SPACE CONNECTOR - ROBUST INSTALLER (V3)
+# FIWARE DATA SPACE CONNECTOR - ROBUST INSTALLER (V4)
 # Updates:
-#  - Verified Docker Login (Pre-flight check)
-#  - Improved UI for Credentials
-#  - Fixes Rate Limiting by enforcing secrets everywhere
+#  - Readable Colors (Light Blue/Cyan)
+#  - Visual Feedback on Password Input (Character count)
+#  - Verified Docker Login & Rate Limit Fixes
 # ==============================================================================
 
 # --- DETECT REAL USER ---
@@ -22,11 +22,12 @@ fi
 LOG_FILE="$(pwd)/install_fiware.log"
 exec > >(tee -i "$LOG_FILE") 2>&1
 
-# --- COLORS ---
+# --- COLORS (UPDATED FOR READABILITY) ---
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[1;33m' # Bold Yellow
+# Changed to Light Cyan (Bold) for better visibility on black backgrounds
+BLUE='\033[1;36m' 
+YELLOW='\033[1;33m'
 NC='\033[0m'
 
 log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
@@ -36,7 +37,6 @@ log_warn() { echo -e "${RED}[WARN]${NC} $1"; }
 # ==============================================================================
 # 1. CONFIGURATION & VALIDATION
 # ==============================================================================
-# We install dependencies immediately to allow validation
 echo -e "${BLUE}[INIT] Installing dependencies for validation (curl, jq)...${NC}"
 sudo apt-get update > /dev/null 2>&1
 sudo apt-get install -y curl jq inetutils-ping git default-jdk > /dev/null 2>&1
@@ -49,14 +49,23 @@ echo -e "${BLUE}Docker Hub limits anonymous downloads. Valid credentials are REQ
 echo -e "${BLUE}Please check your details at: https://hub.docker.com/settings/security${NC}"
 echo ""
 
-# Interactive Input
+# Interactive Input with Feedback
 if [ -t 0 ]; then
     echo -e -n "Docker Username : ${YELLOW}"
     read DOCKER_USER
+    
     echo -e -n "${NC}Docker Token/PWD: ${YELLOW}"
     read -s DOCKER_PASS
-    echo -e "${NC}" # Newline after silent input
-    echo -e -n "Docker Email    : ${YELLOW}"
+    echo "" # Newline needed after hidden input
+    
+    # Provide visual feedback without revealing the secret
+    if [ -n "$DOCKER_PASS" ]; then
+        echo -e "${GREEN}  -> Received input (${#DOCKER_PASS} characters).${NC}"
+    else
+        echo -e "${RED}  -> No input received!${NC}"
+    fi
+
+    echo -e -n "${NC}Docker Email    : ${YELLOW}"
     read DOCKER_EMAIL
     echo -e "${NC}"
 else
@@ -156,7 +165,7 @@ mkdir -p /fiware/scripts /fiware/trust-anchor /fiware/consumer /fiware/provider 
 chown -R "$REAL_USER:$REAL_USER" /fiware
 
 # Headlamp Setup
-setup_namespace_secrets "kube-system" # Apply secrets to kube-system too!
+setup_namespace_secrets "kube-system" 
 
 helm repo add headlamp https://kubernetes-sigs.github.io/headlamp/
 helm repo update
