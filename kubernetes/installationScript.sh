@@ -2,7 +2,7 @@
 set -e
 
 # ==============================================================================
-# FIWARE INSTALLER - ROBUST SERVICE ACCOUNT WAIT (V8)
+# FIWARE INSTALLER - HELM CONFLICT FIX (V9)
 # ==============================================================================
 
 # --- DETECT REAL USER ---
@@ -140,15 +140,15 @@ fi
 mkdir -p /fiware/scripts /fiware/trust-anchor /fiware/consumer /fiware/provider /fiware/wallet-identity
 chown -R "$REAL_USER:$REAL_USER" /fiware
 
-# --- FIX: ROBUST SECRET SETUP ---
+# Setup Secrets Function
 setup_namespace_secrets() {
     local ns=$1
     log_info "Setting up secrets for namespace: $ns"
     
-    # 1. Ensure Namespace Exists
+    # Ensure Namespace Exists
     kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f -
     
-    # 2. Create Registry Secret (Safety net)
+    # Create Registry Secret (Safety net)
     kubectl create secret docker-registry regcred \
       --docker-server=https://index.docker.io/v1/ \
       --docker-username="$MY_DOCKER_USER" \
@@ -156,8 +156,7 @@ setup_namespace_secrets() {
       --docker-email="$MY_DOCKER_EMAIL" \
       -n "$ns" --dry-run=client -o yaml | kubectl apply -f -
     
-    # 3. WAIT for Default ServiceAccount (The Fix)
-    log_info "Waiting for ServiceAccount 'default' in $ns..."
+    # Wait for Default ServiceAccount
     for i in {1..30}; do
         if kubectl get serviceaccount default -n "$ns" > /dev/null 2>&1; then
             break
@@ -165,7 +164,7 @@ setup_namespace_secrets() {
         sleep 2
     done
 
-    # 4. Patch
+    # Patch Default Only
     kubectl patch serviceaccount default -p '{"imagePullSecrets": [{"name": "regcred"}]}' -n "$ns"
 }
 
@@ -245,8 +244,9 @@ curl -X POST "http://til.${INTERNAL_IP}.nip.io/issuer" --header 'Content-Type: a
 # ==============================================================================
 echo -e "${BLUE}--- STEP 5: PROVIDER ---${NC}"
 setup_namespace_secrets "provider"
-kubectl create serviceaccount postgresql -n provider --dry-run=client -o yaml | kubectl apply -f -
-kubectl patch serviceaccount postgresql -p '{"imagePullSecrets": [{"name": "regcred"}]}' -n provider
+
+# NOTE: Removed manual creation of 'postgresql' service account to prevent Helm conflicts.
+# The global registry config (Step 1) handles authentication for postgres images automatically.
 
 mkdir -p /fiware/provider-identity && cd /fiware/provider-identity
 openssl ecparam -name prime256v1 -genkey -noout -out private-key.pem
