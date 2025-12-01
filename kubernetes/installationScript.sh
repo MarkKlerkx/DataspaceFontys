@@ -2,7 +2,7 @@
 set -e
 
 # ==============================================================================
-# FIWARE INSTALLER - IGNORE JOB ERRORS (V12)
+# FIWARE INSTALLER - APPLICATION AWARE WAITING (V13)
 # ==============================================================================
 
 # --- DETECT REAL USER ---
@@ -29,13 +29,13 @@ log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# --- SMART WAIT FUNCTION (V12 - TOLERANT MODE) ---
+# --- FUNCTION 1: KUBERNETES POD WAIT ---
 wait_for_ready() {
     local NAMESPACE=$1
     local TIMEOUT_SECS=$2
     local START_TIME=$(date +%s)
     
-    echo -e "${BLUE}[WAIT] Watching namespace '$NAMESPACE' (Ignoring failed Job retries)...${NC}"
+    echo -e "${BLUE}[WAIT] Kubernetes: Watching namespace '$NAMESPACE' (Ignoring Job errors)...${NC}"
 
     while true; do
         local CURRENT_TIME=$(date +%s)
@@ -46,30 +46,51 @@ wait_for_ready() {
             return 1
         fi
 
-        # V12 CHANGE: We ignore 'Error' status because Jobs leave them behind.
-        # We only count pods that are actively trying to start but failing/waiting.
-        # Filter excludes: Running, Completed, Error.
+        # Filter excludes: Running, Completed, Error (Jobs).
         local PENDING_PODS=$(kubectl get pods -n $NAMESPACE --no-headers | grep -v -E "Running|Completed|Error" | wc -l)
         
-        # Check for active issues we DO care about (CrashLoop means it keeps trying and failing)
-        if kubectl get pods -n $NAMESPACE --no-headers | grep -q -E "CrashLoopBackOff|ErrImagePull|ImagePullBackOff"; then
-             echo -e "${YELLOW}  -> Warning: Some pods are struggling (CrashLoop/ImagePull)...${NC}"
-        fi
-
-        # SUCCESS CONDITION
         if [ "$PENDING_PODS" -eq 0 ]; then
-            # Verify we have at least SOME healthy pods (to avoid empty namespace success)
+            # Verify we have at least SOME healthy pods
             local HEALTHY_COUNT=$(kubectl get pods -n $NAMESPACE --no-headers | grep -E "Running|Completed" | wc -l)
             if [ "$HEALTHY_COUNT" -gt 0 ]; then
-                log_success "Namespace '$NAMESPACE' looks stable ($HEALTHY_COUNT healthy pods)!"
+                log_success "Namespace '$NAMESPACE' pods are running!"
                 return 0
             fi
         fi
-
-        echo -ne "  ... $ELAPSED seconds. Waiting for $PENDING_PODS pods to settle...\r"
-        sleep 10
+        sleep 5
     done
-    echo ""
+}
+
+# --- FUNCTION 2: API ENDPOINT WAIT (NEW IN V13) ---
+wait_for_api() {
+    local URL=$1
+    local TIMEOUT_SECS=300 # Wait max 5 mins for app to boot
+    local START_TIME=$(date +%s)
+    
+    echo -ne "${BLUE}[WAIT] API: Waiting for $URL to become responsive...${NC}"
+
+    while true; do
+        local CURRENT_TIME=$(date +%s)
+        local ELAPSED=$((CURRENT_TIME - START_TIME))
+        
+        if [ $ELAPSED -gt $TIMEOUT_SECS ]; then
+            echo ""
+            log_error "API Timeout! $URL did not respond in time."
+            return 1
+        fi
+
+        # We try to fetch headers. If connection refused (000), we wait. 
+        # Any other code (200, 401, 403, 404, 500) means the server is THERE.
+        local STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 2 "$URL" || echo "000")
+
+        if [ "$STATUS" != "000" ]; then
+            echo -e " ${GREEN}[OK] (Status: $STATUS)${NC}"
+            return 0
+        fi
+
+        echo -ne "."
+        sleep 5
+    done
 }
 
 # ==============================================================================
@@ -183,7 +204,7 @@ fi
 mkdir -p /fiware/scripts /fiware/trust-anchor /fiware/consumer /fiware/provider /fiware/wallet-identity
 chown -R "$REAL_USER:$REAL_USER" /fiware
 
-# Setup Secrets (Safety Net)
+# Setup Secrets
 setup_namespace_secrets() {
     local ns=$1
     kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f -
@@ -252,6 +273,7 @@ sed "s|INTERNAL_IP|$INTERNAL_IP|g" /fiware/trust-anchor/values.yaml-template > /
 helm upgrade --install trust-anchor data-space-connector/trust-anchor --version 0.2.1 -f /fiware/trust-anchor/values.yaml --namespace trust-anchor
 
 wait_for_ready "trust-anchor" 600
+wait_for_api "http://til.${INTERNAL_IP}.nip.io/issuer" # V13 ADDITION
 
 # ==============================================================================
 # 6. CONSUMER
@@ -274,6 +296,10 @@ sed -e "s|DID_CONSUMER|$CONSUMER_DID|g" -e "s|INTERNAL_IP|$INTERNAL_IP|g" /fiwar
 helm upgrade --install consumer-dsc data-space-connector/data-space-connector --version 8.2.22 -f /fiware/consumer/values.yaml --namespace consumer
 
 wait_for_ready "consumer" 600
+
+# Registration
+echo -e "${BLUE}[ACTION] Registering Consumer DID...${NC}"
+# We already waited for TIL in previous step, so we can fire away
 curl -X POST "http://til.${INTERNAL_IP}.nip.io/issuer" --header 'Content-Type: application/json' --data "{\"did\": \"$CONSUMER_DID\", \"credentials\": []}" || true
 
 # ==============================================================================
@@ -314,11 +340,14 @@ helm repo update
 helm upgrade --install apisix apisix/apisix -f apisix-values.yaml -n provider
 helm upgrade --install apisix-dashboard apisix/apisix-dashboard -f apisix-dashboard.yaml -n provider
 
-# USE SMART WAIT (Ignoring Job Errors)
+# WAIT FOR PODS
 wait_for_ready "provider" 1200
-
 kubectl apply -f apisix-routes-job.yaml -n provider
 
+# WAIT FOR APIS
+wait_for_api "http://til-provider.${INTERNAL_IP}.nip.io/issuer" # V13 ADDITION
+
+echo -e "${BLUE}[ACTION] Establishing Trust Relations...${NC}"
 curl -X POST "http://til.${INTERNAL_IP}.nip.io/issuer" --header 'Content-Type: application/json' --data "{\"did\": \"$PROVIDER_DID\", \"credentials\": []}"
 sleep 2
 curl -X POST "http://til-provider.${INTERNAL_IP}.nip.io/issuer" --header 'Content-Type: application/json' --data "{\"did\": \"$CONSUMER_DID\", \"credentials\": [{\"credentialsType\": \"UserCredential\"}]}"
@@ -338,11 +367,32 @@ chmod -R o+rw /fiware/wallet-identity/private-key.pem
 # 9. DATA
 # ==============================================================================
 echo -e "${BLUE}--- STEP 7: DEMO DATA ---${NC}"
-sleep 5
+
+# WAIT FOR PAP (Policy Administration Point)
+wait_for_api "http://pap-provider.${INTERNAL_IP}.nip.io/policy"
+
+echo -e "${BLUE}[ACTION] Creating ODRL Policy...${NC}"
 curl -s -X 'POST' "http://pap-provider.${INTERNAL_IP}.nip.io/policy" -H 'Content-Type: application/json' -d '{"@context":{"odrl":"http://www.w3.org/ns/odrl/2/"},"@type":"odrl:Policy","odrl:permission":{"odrl:assignee":{"@id":"vc:any"},"odrl:action":{"@id":"odrl:read"}}}'
-kubectl port-forward -n provider svc/data-service-scorpio 9090:9090 > /dev/null 2>&1 &
-PF_PID=$!
-sleep 5
+
+# WAIT FOR SCORPIO (Port Forwarding needed, so we rely on sleep + loop)
+echo -e "${BLUE}[WAIT] Waiting for Scorpio Context Broker (via Port Forward)...${NC}"
+
+# We can't easily curl the NodePort/Service from the host without PF, so we do PF and check
+for i in {1..30}; do
+    kubectl port-forward -n provider svc/data-service-scorpio 9090:9090 > /dev/null 2>&1 &
+    PF_PID=$!
+    sleep 3
+    if curl -s "http://localhost:9090/ngsi-ld/v1/entities" > /dev/null; then
+        echo -e " ${GREEN}[OK] Scorpio is ready.${NC}"
+        break
+    else
+        kill $PF_PID
+        sleep 5
+        echo -n "."
+    fi
+done
+
+echo -e "${BLUE}[ACTION] Pushing EnergyReport Data...${NC}"
 curl -s -X POST "http://localhost:9090/ngsi-ld/v1/entities/" --header 'Content-Type: application/ld+json' --data-raw '{"id":"urn:ngsi-ld:EnergyReport:001","type":"EnergyReport","consumption":{"type":"Property","value":150.5,"unitCode":"KWH"},"@context":["https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld"]}'
 kill $PF_PID
 
