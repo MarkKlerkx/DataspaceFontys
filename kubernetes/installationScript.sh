@@ -1,22 +1,20 @@
 #!/bin/bash
 
 # ==============================================================================
-# FIWARE DATA SPACE CONNECTOR - PRO INSTALLER
+# FIWARE DATA SPACE CONNECTOR - FINAL FIX INSTALLER
 # Features:
-#  - Auto-Logging to file
-#  - Docker Hub Authentication (prevents Rate Limits)
-#  - Storage Deadlock Auto-Fix
+#  - Fixes "Too Many Requests" by patching ALL ServiceAccounts (Postgres fix)
+#  - Auto-Logging
+#  - Storage Fix
 # ==============================================================================
 
 # --- 1. SETUP LOGGING ---
-# Log everything to install_fiware.log in the current directory, while showing it on screen.
 LOG_FILE="$(pwd)/install_fiware.log"
 if [ ! -f "$LOG_FILE" ]; then touch "$LOG_FILE"; fi
 exec > >(tee -i "$LOG_FILE") 2>&1
 
 echo "=========================================================="
-echo " LOGGING ENABLED: Output saved to:"
-echo " $LOG_FILE"
+echo " LOGGING ENABLED: $LOG_FILE"
 echo "=========================================================="
 
 # --- Colors ---
@@ -47,21 +45,22 @@ wait_for_pods() {
 fix_stuck_storage() {
     local ns=$1
     if sudo kubectl get pvc -n "$ns" 2>/dev/null | grep -q "Pending"; then
-        log_warn "Storage Deadlock detected in '$ns'. Starting auto-fix..."
+        log_warn "Storage Deadlock detected in '$ns'. Auto-fixing..."
         sudo kubectl rollout restart deployment local-path-provisioner -n kube-system
         sleep 10
-        # Delete pending claims so they re-bind
         sudo kubectl get pvc -n "$ns" | grep Pending | awk '{print $1}' | xargs -r sudo kubectl delete pvc -n "$ns"
         log_success "Storage reset complete."
     fi
 }
 
-# --- NEW FUNCTION: Apply Docker Auth ---
-apply_docker_secret() {
+# --- IMPROVED DOCKER AUTH FUNCTION ---
+# This now patches ALL ServiceAccounts found in the namespace
+apply_docker_secret_aggressive() {
     local ns=$1
     if [ "$USE_DOCKER_AUTH" = true ]; then
-        log_info "Applying Docker Credentials to namespace '$ns'..."
-        # 1. Create the secret (suppress error if exists)
+        log_info "Applying Docker Credentials to ALL ServiceAccounts in '$ns'..."
+        
+        # 1. Ensure Secret Exists
         sudo kubectl create secret docker-registry regcred \
           --docker-server=https://index.docker.io/v1/ \
           --docker-username="$DOCKER_USER" \
@@ -69,9 +68,19 @@ apply_docker_secret() {
           --docker-email="$DOCKER_EMAIL" \
           -n "$ns" --dry-run=client -o yaml | sudo kubectl apply -f -
         
-        # 2. Patch default serviceaccount
-        sudo kubectl patch serviceaccount default -p '{"imagePullSecrets": [{"name": "regcred"}]}' -n "$ns"
-        log_success "Docker authentication active for '$ns'."
+        # 2. Patch EVERY ServiceAccount (default, postgresql, etc.)
+        for sa in $(sudo kubectl get serviceaccount -n "$ns" -o jsonpath="{.items[*].metadata.name}"); do
+            log_info "  - Patching ServiceAccount: $sa"
+            sudo kubectl patch serviceaccount "$sa" -p '{"imagePullSecrets": [{"name": "regcred"}]}' -n "$ns"
+        done
+
+        # 3. Kill pods that are stuck in PullBackOff so they restart with new creds
+        if sudo kubectl get pods -n "$ns" | grep -q "ImagePullBackOff"; then
+             log_warn "Restarting stuck pods to pick up new credentials..."
+             sudo kubectl delete pod --all -n "$ns" --wait=false
+        fi
+        
+        log_success "Docker authentication applied."
     fi
 }
 
@@ -79,19 +88,17 @@ apply_docker_secret() {
 # INPUT STEP: DOCKER HUB CREDENTIALS
 # ==============================================================================
 echo -e "${YELLOW}--- DOCKER HUB CONFIGURATION ---${NC}"
-echo "To prevent 'ImagePullBackOff' (rate limits), you can login with Docker Hub."
-# Use /dev/tty to read input despite output redirection
+echo "Use your Docker Hub credentials (Username + Access Token) to fix the download errors."
 read -p "Do you want to use Docker Hub credentials? (y/n): " -r RESPONSE < /dev/tty
 if [[ "$RESPONSE" =~ ^([yY][eE][sS]|[yY])+$ ]]; then
     USE_DOCKER_AUTH=true
     echo ""
     read -p "Docker Username: " -r DOCKER_USER < /dev/tty
-    read -p "Docker Access Token (or password): " -r DOCKER_PASS < /dev/tty
+    read -p "Docker Access Token: " -r DOCKER_PASS < /dev/tty
     read -p "Docker Email: " -r DOCKER_EMAIL < /dev/tty
     echo ""
-    log_info "Credentials saved. They will be applied once namespaces are created."
 else
-    log_warn "No credentials provided. You risk hitting download limits (100 pulls/6h)."
+    log_warn "No credentials provided. 'ImagePullBackOff' errors are likely."
 fi
 
 # ==============================================================================
@@ -184,12 +191,14 @@ mkdir -p /fiware/trust-anchor
 wget -qO /fiware/trust-anchor/values.yaml-template https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/trust-anchor/values.yaml-template
 sed "s|INTERNAL_IP|$INTERNAL_IP|g" /fiware/trust-anchor/values.yaml-template > /fiware/trust-anchor/values.yaml
 
-# Create namespace & Apply Docker Auth
+# Create namespace FIRST
 sudo kubectl create namespace trust-anchor --dry-run=client -o yaml | sudo kubectl apply -f -
-apply_docker_secret "trust-anchor"
 
+# Install Helm Chart
 helm upgrade --install trust-anchor data-space-connector/trust-anchor --version 0.2.1 -f /fiware/trust-anchor/values.yaml --namespace trust-anchor
 
+# CRITICAL FIXES (Docker Auth + Storage)
+apply_docker_secret_aggressive "trust-anchor"
 sleep 15
 fix_stuck_storage "trust-anchor"
 wait_for_pods "trust-anchor"
@@ -208,18 +217,20 @@ wget -q https://github.com/wistefan/did-helper/releases/download/0.1.1/did-helpe
 ./did-helper -keystorePath cert.pfx -keystorePassword=test -outputFile did.json
 export CONSUMER_DID=$(cat did.json | jq .id -r)
 
-# Create namespace & Apply Docker Auth
+# Create namespace FIRST
 sudo kubectl create namespace consumer --dry-run=client -o yaml | sudo kubectl apply -f -
-apply_docker_secret "consumer"
 
 sudo kubectl create secret generic consumer-identity --from-file=/fiware/consumer-identity/cert.pfx -n consumer --dry-run=client -o yaml | sudo kubectl apply -f -
 mkdir -p /fiware/consumer
 wget -qO /fiware/consumer/values.yaml-template https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/consumer/values.yaml-template
 sed -e "s|DID_CONSUMER|$CONSUMER_DID|g" -e "s|INTERNAL_IP|$INTERNAL_IP|g" /fiware/consumer/values.yaml-template > /fiware/consumer/values.yaml
-mkdir -p /fiware/provider-identity # Placeholder
+mkdir -p /fiware/provider-identity
 
+# Install Helm Chart
 helm upgrade --install consumer-dsc data-space-connector/data-space-connector --version 8.2.22 -f /fiware/consumer/values.yaml --namespace consumer
 
+# CRITICAL FIXES
+apply_docker_secret_aggressive "consumer"
 sleep 15
 fix_stuck_storage "consumer"
 wait_for_pods "consumer"
@@ -240,19 +251,21 @@ cp ../consumer-identity/did-helper .
 ./did-helper -keystorePath cert.pfx -keystorePassword=test -outputFile did.json
 export PROVIDER_DID=$(cat did.json | jq .id -r)
 
-# Create namespace & Apply Docker Auth
+# Create namespace FIRST
 sudo kubectl create namespace provider --dry-run=client -o yaml | sudo kubectl apply -f -
-apply_docker_secret "provider"
 
 sudo kubectl create secret generic provider-identity --from-file=/fiware/provider-identity/cert.pfx -n provider --dry-run=client -o yaml | sudo kubectl apply -f -
 mkdir -p /fiware/provider
 wget -qO /fiware/provider/values.yaml-template https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/provider/values.yaml-template
 sed -e "s|DID_PROVIDER|$PROVIDER_DID|g" -e "s|DID_CONSUMER|$CONSUMER_DID|g" -e "s|INTERNAL_IP|$INTERNAL_IP|g" /fiware/provider/values.yaml-template > /fiware/provider/values.yaml
 
+# Install Helm Chart (This creates the 'postgresql' serviceaccount)
 helm upgrade --install provider-dsc data-space-connector/data-space-connector --version 8.2.22 -f /fiware/provider/values.yaml --namespace provider
 
-log_info "Checking Provider Storage stability..."
+# --- CRITICAL FIX: Aggressively apply Docker Secrets to ALL accounts ---
+log_info "Applying fixes to Provider namespace..."
 sleep 20
+apply_docker_secret_aggressive "provider"
 fix_stuck_storage "provider"
 wait_for_pods "provider"
 
@@ -275,6 +288,9 @@ helm repo add apisix https://charts.apiseven.com
 helm repo update
 helm upgrade --install apisix apisix/apisix -f apisix-values.yaml -n provider
 helm upgrade --install apisix-dashboard apisix/apisix-dashboard -f apisix-dashboard.yaml -n provider
+
+# Apply fixes again for APISIX (it might use its own ServiceAccount)
+apply_docker_secret_aggressive "provider"
 
 sleep 20
 sudo kubectl apply -f apisix-routes-job.yaml -n provider
