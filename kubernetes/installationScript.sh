@@ -2,7 +2,7 @@
 set -e
 
 # ==============================================================================
-# FIWARE INSTALLER - FIXED VERSION (APISIX & DEBUG)
+# FIWARE INSTALLER - FIXED VERSION (JQ + APISIX + DEBUG)
 # ==============================================================================
 
 # --- DETECT REAL USER ---
@@ -93,15 +93,34 @@ register_did() {
 }
 
 # ==============================================================================
-# 1. SETUP
+# 1. SETUP & TOOLS INSTALLATION (FIXED JQ)
 # ==============================================================================
 echo -e "${BLUE}[INIT] System Check...${NC}"
+# Prevent apt locks issues
 if sudo lsof /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then
     sudo fuser -vki /var/lib/dpkg/lock-frontend || true
     sudo rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock
     sudo dpkg --configure -a
 fi
-sudo apt-get update && sudo apt-get install -y curl jq inetutils-ping git default-jdk
+
+echo -e "${BLUE}[INIT] Installing prerequisites...${NC}"
+sudo apt-get update
+sudo apt-get install -y curl jq inetutils-ping git default-jdk
+
+# FIX: Refresh shell hash table to ensure 'jq' is found immediately
+hash -r 
+
+# FIX: Verify JQ installation
+if ! command -v jq &> /dev/null; then
+    log_warn "JQ not found after install. Retrying..."
+    sudo apt-get install -y jq
+    hash -r
+fi
+if ! command -v jq &> /dev/null; then
+    log_error "Critical: 'jq' could not be installed. Exiting."
+    exit 1
+fi
+log_success "Prerequisites installed (jq detected)."
 
 clear
 echo -e "${BLUE}Docker Hub Auth (Required for Rate Limits)${NC}"
@@ -115,8 +134,14 @@ fi
 
 # Validation
 LOGIN_RESPONSE=$(curl -s -H "Content-Type: application/json" -X POST -d '{"username": "'${MY_DOCKER_USER}'", "password": "'${MY_DOCKER_PASS}'"}' https://hub.docker.com/v2/users/login)
-if [[ $(echo $LOGIN_RESPONSE | jq -r .token) == "null" ]]; then
-    echo -e "${RED}Login Failed.${NC}" ; exit 1
+
+# Use jq safely
+TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r .token 2>/dev/null)
+
+if [[ "$TOKEN" == "null" || -z "$TOKEN" ]]; then
+    echo -e "${RED}Login Failed. Check credentials.${NC}" 
+    echo "Response: $LOGIN_RESPONSE"
+    exit 1
 fi
 log_success "Docker Login OK."
 
