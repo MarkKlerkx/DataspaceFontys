@@ -2,7 +2,7 @@
 set -e
 
 # ==============================================================================
-# FIWARE INSTALLER - FIXED VERSION (DASHBOARD INGRESS & JQ)
+# FIWARE INSTALLER - FIXED VERSION (DASHBOARD INGRESS FIX + JQ)
 # ==============================================================================
 
 # --- DETECT REAL USER ---
@@ -96,6 +96,11 @@ register_did() {
 # 1. SETUP & TOOLS INSTALLATION
 # ==============================================================================
 echo -e "${BLUE}[INIT] System Check...${NC}"
+
+# --- FIX TIME SYNC (Prevent APT errors) ---
+sudo timedatectl set-ntp off
+sudo timedatectl set-ntp on
+
 # Prevent apt locks issues
 if sudo lsof /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then
     sudo fuser -vki /var/lib/dpkg/lock-frontend || true
@@ -312,8 +317,8 @@ wget -qO opa-configmaps.yaml https://raw.githubusercontent.com/MarkKlerkx/Datasp
 sed "s|INTERNAL_IP|$INTERNAL_IP|g" apisix-values.yaml-template > apisix-values.yaml
 sed "s|INTERNAL_IP|$INTERNAL_IP|g" apisix-routes-job.yaml-template > apisix-routes-job.yaml
 
-# --- FIX: GENERATE DASHBOARD YAML LOCALLY ---
-# Dit lost de "map[...]" error op door geen --set te gebruiken voor complexe Ingress
+# --- FIX: GENERATE DASHBOARD YAML (SIMPLIFIED FOR DEPRECATED CHART) ---
+# We use simple string paths because the chart crashes on object maps
 cat <<EOF > apisix-dashboard.yaml
 image:
   repository: apache/apisix-dashboard
@@ -327,8 +332,7 @@ ingress:
   hosts:
     - host: apisix-dashboard.${INTERNAL_IP}.nip.io
       paths:
-        - path: /
-          pathType: ImplementationSpecific
+        - /
 EOF
 
 kubectl apply -f opa-configmaps.yaml -n provider
