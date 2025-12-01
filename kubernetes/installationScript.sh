@@ -2,7 +2,7 @@
 set -e
 
 # ==============================================================================
-# FIWARE INSTALLER - ROUTE LOADER FIX (V16)
+# FIWARE INSTALLER - FINAL ROUTE VERIFICATION (V17)
 # ==============================================================================
 
 # --- DETECT REAL USER ---
@@ -92,6 +92,46 @@ register_did() {
     log_error "Registration failed." ; return 1
 }
 
+# --- V17 NEW FUNCTION: VERIFY & FIX ROUTES ---
+ensure_apisix_routes() {
+    echo -e "${BLUE}[CHECK] Verifying APISIX Routes...${NC}"
+    
+    # 1. Port Forward Admin API
+    local PF_PID=""
+    kubectl port-forward -n provider svc/apisix-admin 9180:9180 >/dev/null 2>&1 &
+    PF_PID=$!
+    sleep 3
+
+    # 2. Check route count
+    # Note: We assume the default admin key is 'admin' or loaded from secret. 
+    # The Job uses the internal secret, but we check externally.
+    # We try both 'admin' and the key from the secret.
+    local ADMIN_KEY=$(kubectl get secret apisix-admin-secret -n provider -o jsonpath='{.data.admin-key}' | base64 --decode)
+    [ -z "$ADMIN_KEY" ] && ADMIN_KEY="admin"
+
+    local ROUTE_COUNT=$(curl -s -H "X-API-KEY: $ADMIN_KEY" http://127.0.0.1:9180/apisix/admin/routes | jq '.list | length' 2>/dev/null || echo "0")
+    
+    kill $PF_PID
+
+    if [ "$ROUTE_COUNT" -gt 0 ]; then
+        log_success "APISIX has $ROUTE_COUNT routes loaded. Good!"
+    else
+        log_warn "APISIX has 0 routes! The job failed silently. Retrying..."
+        
+        # Delete and Re-apply
+        kubectl delete job apisix-route-importer -n provider --ignore-not-found
+        sleep 5
+        kubectl apply -f /fiware/apisix/apisix-routes-job.yaml -n provider
+        
+        # Wait for completion
+        kubectl wait --for=condition=complete job/apisix-route-importer -n provider --timeout=120s
+        
+        # Restart Dashboard to force refresh
+        kubectl rollout restart deployment apisix-dashboard -n provider
+        log_info "Dashboard restarted to sync routes."
+    fi
+}
+
 # ==============================================================================
 # 1. SETUP
 # ==============================================================================
@@ -169,7 +209,7 @@ helm upgrade --install my-headlamp headlamp/headlamp -n kube-system
 kubectl patch service my-headlamp -n kube-system -p '{"spec":{"type":"NodePort"}}'
 
 # ==============================================================================
-# 4. SCRIPTS & BASHRC (IMPROVED DEBUGGING)
+# 4. SCRIPTS & BASHRC
 # ==============================================================================
 export INTERNAL_IP=$(ip route get 1.1.1.1 | awk '{print $7}')
 wget -qO /fiware/scripts/get_credential.sh https://raw.githubusercontent.com/wistefan/deployment-demo/main/scripts/get_credential.sh
@@ -178,7 +218,6 @@ chmod +x /fiware/scripts/*.sh
 sed -i "s|did.json|did.json|g" /fiware/scripts/get_access_token_oid4vp.sh
 chown -R "$REAL_USER:$REAL_USER" /fiware/scripts
 
-# INJECT DEBUGGING FUNCTION
 if ! grep -q "refresh_demo_tokens" "$REAL_HOME/.bashrc"; then
     cat <<EOF >> "$REAL_HOME/.bashrc"
 export INTERNAL_IP=\$(ip route get 1.1.1.1 | awk '{print \$7}')
@@ -187,10 +226,8 @@ refresh_demo_tokens() {
   echo "--- REFRESHING TOKENS (DEBUG MODE) ---"
   export INTERNAL_IP=\$(ip route get 1.1.1.1 | awk '{print \$7}')
   echo "IP: \$INTERNAL_IP"
-  
   export CONSUMER_DID=\$(cat /fiware/consumer-identity/did.json 2>/dev/null | jq '.id' -r || echo "N/A")
   export PROVIDER_DID=\$(cat /fiware/provider-identity/did.json 2>/dev/null | jq '.id' -r || echo "N/A")
-  echo "Consumer DID: \${CONSUMER_DID:0:15}..."
   
   echo "Fetching User Credential (Consumer)..."
   export USER_CREDENTIAL=\$(/fiware/scripts/get_credential.sh http://keycloak-consumer.\${INTERNAL_IP}.nip.io user-credential 2>/dev/null)
@@ -253,7 +290,7 @@ wait_for_api "http://keycloak-consumer.${INTERNAL_IP}.nip.io/realms/master"
 register_did "http://til.${INTERNAL_IP}.nip.io/issuer" "$CONSUMER_DID" "[]"
 
 # ==============================================================================
-# 7. PROVIDER & APISIX FIX
+# 7. PROVIDER & APISIX
 # ==============================================================================
 echo -e "${BLUE}--- STEP 5: PROVIDER & ROUTE LOADING ---${NC}"
 setup_ns "provider"
@@ -289,18 +326,19 @@ helm repo add apisix https://charts.apiseven.com ; helm repo update
 helm upgrade --install apisix apisix/apisix -f apisix-values.yaml -n provider
 helm upgrade --install apisix-dashboard apisix/apisix-dashboard -f apisix-dashboard.yaml -n provider
 
-# CRITICAL WAIT: Wait for Provider Pods AND APISIX Admin API
+# CRITICAL WAIT
 wait_for_ready "provider" 1200
 
-# V16 FIX: Clean up old jobs and force reload routes
-log_info "Ensuring APISIX Routes are loaded (Deleting old job)..."
+# V17 FIX: CLEAN, APPLY, VERIFY, REPAIR
+log_info "Loading APISIX Routes..."
 kubectl delete job apisix-route-importer -n provider --ignore-not-found
-log_info "Applying Route Job..."
 kubectl apply -f apisix-routes-job.yaml -n provider
-# Wait for the job to actually finish
-kubectl wait --for=condition=complete job/apisix-route-importer -n provider --timeout=300s || log_warn "Route job did not report complete (might be ok)."
+kubectl wait --for=condition=complete job/apisix-route-importer -n provider --timeout=300s || log_warn "Route job timeout (checking via API)..."
 
-# Verify Trust APIs
+# Call the repair function
+ensure_apisix_routes
+
+# Verify APIs are actually reachable now
 wait_for_api "http://til-provider.${INTERNAL_IP}.nip.io/issuer"
 wait_for_api "http://keycloak-provider.${INTERNAL_IP}.nip.io/realms/master"
 
