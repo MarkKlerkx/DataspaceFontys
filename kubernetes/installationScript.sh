@@ -2,7 +2,7 @@
 set -e
 
 # ==============================================================================
-# FIWARE INSTALLER - STABLE K3S INIT (V7)
+# FIWARE INSTALLER - ROBUST SERVICE ACCOUNT WAIT (V8)
 # ==============================================================================
 
 # --- DETECT REAL USER ---
@@ -79,11 +79,11 @@ else
 fi
 
 # ==============================================================================
-# 2. K3S INSTALLATION (OPTIMIZED ORDER)
+# 2. K3S INSTALLATION
 # ==============================================================================
 echo -e "${BLUE}--- STEP 1: K3S INSTALLATION ---${NC}"
 
-# A. PRE-CONFIGURE REGISTRY (Avoids restart issues)
+# A. PRE-CONFIGURE REGISTRY
 echo -e "${BLUE}[CONFIG] Pre-configuring Registry Auth...${NC}"
 sudo mkdir -p /etc/rancher/k3s
 sudo cat <<EOF > /etc/rancher/k3s/registries.yaml
@@ -96,8 +96,7 @@ EOF
 
 # B. INSTALL K3S
 if ! command -v k3s &> /dev/null; then
-    log_info "Installing K3s (This may take a moment)..."
-    # We install with the config already in place, so no restart needed!
+    log_info "Installing K3s..."
     curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--write-kubeconfig-mode 644" sh -
 else
     log_info "K3s already installed."
@@ -107,7 +106,7 @@ fi
 log_info "Configuring access for user: $REAL_USER"
 mkdir -p "$REAL_HOME/.kube"
 
-# Wait loop for the config file to appear (max 30 sec)
+# Wait for config file
 for i in {1..30}; do
     if [ -f /etc/rancher/k3s/k3s.yaml ]; then
         break
@@ -122,7 +121,7 @@ export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
 log_info "Waiting for K3s Node to be Ready..."
 for i in {1..60}; do
-    if kubectl get nodes | grep -q "Ready"; then
+    if kubectl get nodes 2>/dev/null | grep -q "Ready"; then
         log_success "K3s is Up & Running."
         break
     fi
@@ -141,16 +140,32 @@ fi
 mkdir -p /fiware/scripts /fiware/trust-anchor /fiware/consumer /fiware/provider /fiware/wallet-identity
 chown -R "$REAL_USER:$REAL_USER" /fiware
 
-# Helper for Legacy Namespace Secrets (Safety net)
+# --- FIX: ROBUST SECRET SETUP ---
 setup_namespace_secrets() {
     local ns=$1
+    log_info "Setting up secrets for namespace: $ns"
+    
+    # 1. Ensure Namespace Exists
     kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f -
+    
+    # 2. Create Registry Secret (Safety net)
     kubectl create secret docker-registry regcred \
       --docker-server=https://index.docker.io/v1/ \
       --docker-username="$MY_DOCKER_USER" \
       --docker-password="$MY_DOCKER_PASS" \
       --docker-email="$MY_DOCKER_EMAIL" \
       -n "$ns" --dry-run=client -o yaml | kubectl apply -f -
+    
+    # 3. WAIT for Default ServiceAccount (The Fix)
+    log_info "Waiting for ServiceAccount 'default' in $ns..."
+    for i in {1..30}; do
+        if kubectl get serviceaccount default -n "$ns" > /dev/null 2>&1; then
+            break
+        fi
+        sleep 2
+    done
+
+    # 4. Patch
     kubectl patch serviceaccount default -p '{"imagePullSecrets": [{"name": "regcred"}]}' -n "$ns"
 }
 
