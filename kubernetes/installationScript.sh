@@ -2,7 +2,7 @@
 set -e
 
 # ==============================================================================
-# FIWARE INSTALLER - APPLICATION AWARE WAITING (V13)
+# FIWARE INSTALLER - ROBUST API CHECKS (V14)
 # ==============================================================================
 
 # --- DETECT REAL USER ---
@@ -46,11 +46,9 @@ wait_for_ready() {
             return 1
         fi
 
-        # Filter excludes: Running, Completed, Error (Jobs).
         local PENDING_PODS=$(kubectl get pods -n $NAMESPACE --no-headers | grep -v -E "Running|Completed|Error" | wc -l)
         
         if [ "$PENDING_PODS" -eq 0 ]; then
-            # Verify we have at least SOME healthy pods
             local HEALTHY_COUNT=$(kubectl get pods -n $NAMESPACE --no-headers | grep -E "Running|Completed" | wc -l)
             if [ "$HEALTHY_COUNT" -gt 0 ]; then
                 log_success "Namespace '$NAMESPACE' pods are running!"
@@ -61,13 +59,13 @@ wait_for_ready() {
     done
 }
 
-# --- FUNCTION 2: API ENDPOINT WAIT (NEW IN V13) ---
+# --- FUNCTION 2: STRICT API WAIT (V14) ---
 wait_for_api() {
     local URL=$1
-    local TIMEOUT_SECS=300 # Wait max 5 mins for app to boot
+    local TIMEOUT_SECS=600 # 10 minutes max for app startup
     local START_TIME=$(date +%s)
     
-    echo -ne "${BLUE}[WAIT] API: Waiting for $URL to become responsive...${NC}"
+    echo -ne "${BLUE}[WAIT] API: Waiting for $URL ...${NC}"
 
     while true; do
         local CURRENT_TIME=$(date +%s)
@@ -79,11 +77,11 @@ wait_for_api() {
             return 1
         fi
 
-        # We try to fetch headers. If connection refused (000), we wait. 
-        # Any other code (200, 401, 403, 404, 500) means the server is THERE.
+        # Get HTTP Code. 000=Down, 503=Unavailable. We want 2xx, 3xx or 4xx.
         local STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 2 "$URL" || echo "000")
 
-        if [ "$STATUS" != "000" ]; then
+        # Check if status is between 200 and 499 (Healthy response)
+        if [[ "$STATUS" -ge 200 && "$STATUS" -lt 500 ]]; then
             echo -e " ${GREEN}[OK] (Status: $STATUS)${NC}"
             return 0
         fi
@@ -91,6 +89,42 @@ wait_for_api() {
         echo -ne "."
         sleep 5
     done
+}
+
+# --- FUNCTION 3: ROBUST REGISTRATION (V14) ---
+register_did() {
+    local URL=$1
+    local DID=$2
+    local CREDENTIALS=$3 # JSON array string
+    local ATTEMPT=1
+    local MAX_RETRIES=20
+
+    echo -e "${BLUE}[ACTION] Registering DID: $DID ...${NC}"
+
+    until [ $ATTEMPT -ge $MAX_RETRIES ]; do
+        # We capture the HTTP code AND the body
+        RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$URL" \
+            --header 'Content-Type: application/json' \
+            --data "{\"did\": \"$DID\", \"credentials\": $CREDENTIALS}")
+        
+        HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+        BODY=$(echo "$RESPONSE" | sed '$d')
+
+        if [[ "$HTTP_CODE" -ge 200 && "$HTTP_CODE" -lt 300 ]]; then
+            log_success "Registration successful!"
+            return 0
+        elif [[ "$BODY" == *"already exists"* ]]; then
+             log_warn "DID already registered (Skipping)."
+             return 0
+        else
+            echo -ne "${YELLOW}   -> Attempt $ATTEMPT/$MAX_RETRIES failed ($HTTP_CODE). Retrying in 5s...${NC}\r"
+            sleep 5
+        fi
+        ATTEMPT=$((ATTEMPT+1))
+    done
+    
+    log_error "Failed to register DID after $MAX_RETRIES attempts."
+    return 1
 }
 
 # ==============================================================================
@@ -273,7 +307,8 @@ sed "s|INTERNAL_IP|$INTERNAL_IP|g" /fiware/trust-anchor/values.yaml-template > /
 helm upgrade --install trust-anchor data-space-connector/trust-anchor --version 0.2.1 -f /fiware/trust-anchor/values.yaml --namespace trust-anchor
 
 wait_for_ready "trust-anchor" 600
-wait_for_api "http://til.${INTERNAL_IP}.nip.io/issuer" # V13 ADDITION
+# Ensure TIR is actually responding to HTTP before we try to use it later
+wait_for_api "http://til.${INTERNAL_IP}.nip.io/v4/issuers"
 
 # ==============================================================================
 # 6. CONSUMER
@@ -296,11 +331,11 @@ sed -e "s|DID_CONSUMER|$CONSUMER_DID|g" -e "s|INTERNAL_IP|$INTERNAL_IP|g" /fiwar
 helm upgrade --install consumer-dsc data-space-connector/data-space-connector --version 8.2.22 -f /fiware/consumer/values.yaml --namespace consumer
 
 wait_for_ready "consumer" 600
+# Ensure Consumer Keycloak is up before proceeding
+wait_for_api "http://keycloak-consumer.${INTERNAL_IP}.nip.io/realms/master"
 
-# Registration
-echo -e "${BLUE}[ACTION] Registering Consumer DID...${NC}"
-# We already waited for TIL in previous step, so we can fire away
-curl -X POST "http://til.${INTERNAL_IP}.nip.io/issuer" --header 'Content-Type: application/json' --data "{\"did\": \"$CONSUMER_DID\", \"credentials\": []}" || true
+# Use the robust retry function
+register_did "http://til.${INTERNAL_IP}.nip.io/issuer" "$CONSUMER_DID" "[]"
 
 # ==============================================================================
 # 7. PROVIDER
@@ -340,18 +375,19 @@ helm repo update
 helm upgrade --install apisix apisix/apisix -f apisix-values.yaml -n provider
 helm upgrade --install apisix-dashboard apisix/apisix-dashboard -f apisix-dashboard.yaml -n provider
 
-# WAIT FOR PODS
+# Wait for Provider Pods
 wait_for_ready "provider" 1200
 kubectl apply -f apisix-routes-job.yaml -n provider
 
-# WAIT FOR APIS
-wait_for_api "http://til-provider.${INTERNAL_IP}.nip.io/issuer" # V13 ADDITION
+# Wait for Provider APIs
+wait_for_api "http://til-provider.${INTERNAL_IP}.nip.io/issuer"
+wait_for_api "http://keycloak-provider.${INTERNAL_IP}.nip.io/realms/master"
 
 echo -e "${BLUE}[ACTION] Establishing Trust Relations...${NC}"
-curl -X POST "http://til.${INTERNAL_IP}.nip.io/issuer" --header 'Content-Type: application/json' --data "{\"did\": \"$PROVIDER_DID\", \"credentials\": []}"
-sleep 2
-curl -X POST "http://til-provider.${INTERNAL_IP}.nip.io/issuer" --header 'Content-Type: application/json' --data "{\"did\": \"$CONSUMER_DID\", \"credentials\": [{\"credentialsType\": \"UserCredential\"}]}"
-curl -X POST "http://til-provider.${INTERNAL_IP}.nip.io/issuer" --header 'Content-Type: application/json' --data "{\"did\": \"$PROVIDER_DID\", \"credentials\": [{\"credentialsType\": \"UserCredential\"}]}"
+# Use robust registration for all calls
+register_did "http://til.${INTERNAL_IP}.nip.io/issuer" "$PROVIDER_DID" "[]"
+register_did "http://til-provider.${INTERNAL_IP}.nip.io/issuer" "$CONSUMER_DID" "[{\"credentialsType\": \"UserCredential\"}]"
+register_did "http://til-provider.${INTERNAL_IP}.nip.io/issuer" "$PROVIDER_DID" "[{\"credentialsType\": \"UserCredential\"}]"
 
 # ==============================================================================
 # 8. WALLET
@@ -368,16 +404,14 @@ chmod -R o+rw /fiware/wallet-identity/private-key.pem
 # ==============================================================================
 echo -e "${BLUE}--- STEP 7: DEMO DATA ---${NC}"
 
-# WAIT FOR PAP (Policy Administration Point)
+# WAIT FOR PAP
 wait_for_api "http://pap-provider.${INTERNAL_IP}.nip.io/policy"
 
 echo -e "${BLUE}[ACTION] Creating ODRL Policy...${NC}"
 curl -s -X 'POST' "http://pap-provider.${INTERNAL_IP}.nip.io/policy" -H 'Content-Type: application/json' -d '{"@context":{"odrl":"http://www.w3.org/ns/odrl/2/"},"@type":"odrl:Policy","odrl:permission":{"odrl:assignee":{"@id":"vc:any"},"odrl:action":{"@id":"odrl:read"}}}'
 
-# WAIT FOR SCORPIO (Port Forwarding needed, so we rely on sleep + loop)
-echo -e "${BLUE}[WAIT] Waiting for Scorpio Context Broker (via Port Forward)...${NC}"
-
-# We can't easily curl the NodePort/Service from the host without PF, so we do PF and check
+# WAIT FOR SCORPIO
+echo -e "${BLUE}[WAIT] Waiting for Scorpio Context Broker...${NC}"
 for i in {1..30}; do
     kubectl port-forward -n provider svc/data-service-scorpio 9090:9090 > /dev/null 2>&1 &
     PF_PID=$!
