@@ -2,7 +2,7 @@
 set -e
 
 # ==============================================================================
-# FIWARE INSTALLER - FINAL ROUTE VERIFICATION (V17)
+# FIWARE INSTALLER - AUTO CLEANUP & FRESH START (V18)
 # ==============================================================================
 
 # --- DETECT REAL USER ---
@@ -40,8 +40,16 @@ wait_for_ready() {
         local ELAPSED=$((CURRENT_TIME - START_TIME))
         if [ $ELAPSED -gt $TIMEOUT_SECS ]; then
             log_error "Timeout '$NAMESPACE'!"
+            echo "--- POD STATUS ---"
+            kubectl get pods -n $NAMESPACE
             return 1
         fi
+        
+        # Check for stuck pods
+        if kubectl get pods -n $NAMESPACE --no-headers | grep -q -E "CrashLoopBackOff|ErrImagePull"; then
+             echo -ne "${YELLOW}  -> Retry: Pods are crashing/restarting... ${NC}\r"
+        fi
+
         local PENDING=$(kubectl get pods -n $NAMESPACE --no-headers | grep -v -E "Running|Completed|Error" | wc -l)
         if [ "$PENDING" -eq 0 ]; then
             local HEALTHY=$(kubectl get pods -n $NAMESPACE --no-headers | grep -E "Running|Completed" | wc -l)
@@ -92,43 +100,35 @@ register_did() {
     log_error "Registration failed." ; return 1
 }
 
-# --- V17 NEW FUNCTION: VERIFY & FIX ROUTES ---
+# --- V18 NEW FUNCTION: CLEANUP ---
+# This forces a fresh start for databases to prevent "Locked" or "Corrupt" errors on re-runs
+cleanup_ns_storage() {
+    local NS=$1
+    log_info "Cleaning up old storage in '$NS' to ensure fresh install..."
+    # We delete the PVCs. The next Helm Install will create fresh ones.
+    kubectl delete pvc --all -n "$NS" --ignore-not-found >/dev/null 2>&1 || true
+}
+
 ensure_apisix_routes() {
     echo -e "${BLUE}[CHECK] Verifying APISIX Routes...${NC}"
-    
-    # 1. Port Forward Admin API
     local PF_PID=""
     kubectl port-forward -n provider svc/apisix-admin 9180:9180 >/dev/null 2>&1 &
     PF_PID=$!
     sleep 3
-
-    # 2. Check route count
-    # Note: We assume the default admin key is 'admin' or loaded from secret. 
-    # The Job uses the internal secret, but we check externally.
-    # We try both 'admin' and the key from the secret.
     local ADMIN_KEY=$(kubectl get secret apisix-admin-secret -n provider -o jsonpath='{.data.admin-key}' | base64 --decode)
     [ -z "$ADMIN_KEY" ] && ADMIN_KEY="admin"
-
     local ROUTE_COUNT=$(curl -s -H "X-API-KEY: $ADMIN_KEY" http://127.0.0.1:9180/apisix/admin/routes | jq '.list | length' 2>/dev/null || echo "0")
-    
     kill $PF_PID
-
     if [ "$ROUTE_COUNT" -gt 0 ]; then
         log_success "APISIX has $ROUTE_COUNT routes loaded. Good!"
     else
         log_warn "APISIX has 0 routes! The job failed silently. Retrying..."
-        
-        # Delete and Re-apply
         kubectl delete job apisix-route-importer -n provider --ignore-not-found
         sleep 5
         kubectl apply -f /fiware/apisix/apisix-routes-job.yaml -n provider
-        
-        # Wait for completion
         kubectl wait --for=condition=complete job/apisix-route-importer -n provider --timeout=120s
-        
-        # Restart Dashboard to force refresh
         kubectl rollout restart deployment apisix-dashboard -n provider
-        log_info "Dashboard restarted to sync routes."
+        log_info "Dashboard restarted."
     fi
 }
 
@@ -256,6 +256,8 @@ fi
 # ==============================================================================
 echo -e "${BLUE}--- STEP 3: TRUST ANCHOR ---${NC}"
 setup_ns "trust-anchor"
+cleanup_ns_storage "trust-anchor" # V18 FIX
+
 helm repo add data-space-connector https://fiware.github.io/data-space-connector/
 helm repo update
 wget -qO /fiware/trust-anchor/values.yaml-template https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/trust-anchor/values.yaml-template
@@ -270,6 +272,8 @@ wait_for_api "http://til.${INTERNAL_IP}.nip.io/v4/issuers"
 # ==============================================================================
 echo -e "${BLUE}--- STEP 4: CONSUMER ---${NC}"
 setup_ns "consumer"
+cleanup_ns_storage "consumer" # V18 FIX
+
 cd /fiware/consumer
 mkdir -p /fiware/consumer-identity && cd /fiware/consumer-identity
 openssl ecparam -name prime256v1 -genkey -noout -out private-key.pem
@@ -294,6 +298,7 @@ register_did "http://til.${INTERNAL_IP}.nip.io/issuer" "$CONSUMER_DID" "[]"
 # ==============================================================================
 echo -e "${BLUE}--- STEP 5: PROVIDER & ROUTE LOADING ---${NC}"
 setup_ns "provider"
+cleanup_ns_storage "provider" # V18 FIX
 
 mkdir -p /fiware/provider-identity && cd /fiware/provider-identity
 openssl ecparam -name prime256v1 -genkey -noout -out private-key.pem
