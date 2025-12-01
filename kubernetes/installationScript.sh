@@ -2,7 +2,7 @@
 set -e
 
 # ==============================================================================
-# FIWARE INSTALLER - FIXED VERSION (JQ + APISIX + DEBUG)
+# FIWARE INSTALLER - FIXED VERSION (DASHBOARD INGRESS & JQ)
 # ==============================================================================
 
 # --- DETECT REAL USER ---
@@ -93,7 +93,7 @@ register_did() {
 }
 
 # ==============================================================================
-# 1. SETUP & TOOLS INSTALLATION (FIXED JQ)
+# 1. SETUP & TOOLS INSTALLATION
 # ==============================================================================
 echo -e "${BLUE}[INIT] System Check...${NC}"
 # Prevent apt locks issues
@@ -134,8 +134,6 @@ fi
 
 # Validation
 LOGIN_RESPONSE=$(curl -s -H "Content-Type: application/json" -X POST -d '{"username": "'${MY_DOCKER_USER}'", "password": "'${MY_DOCKER_PASS}'"}' https://hub.docker.com/v2/users/login)
-
-# Use jq safely
 TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r .token 2>/dev/null)
 
 if [[ "$TOKEN" == "null" || -z "$TOKEN" ]]; then
@@ -194,7 +192,7 @@ helm upgrade --install my-headlamp headlamp/headlamp -n kube-system
 kubectl patch service my-headlamp -n kube-system -p '{"spec":{"type":"NodePort"}}'
 
 # ==============================================================================
-# 4. SCRIPTS & BASHRC (FIXED DEBUGGING)
+# 4. SCRIPTS & BASHRC
 # ==============================================================================
 export INTERNAL_IP=$(ip route get 1.1.1.1 | awk '{print $7}')
 wget -qO /fiware/scripts/get_credential.sh https://raw.githubusercontent.com/wistefan/deployment-demo/main/scripts/get_credential.sh
@@ -203,7 +201,7 @@ chmod +x /fiware/scripts/*.sh
 sed -i "s|did.json|did.json|g" /fiware/scripts/get_access_token_oid4vp.sh
 chown -R "$REAL_USER:$REAL_USER" /fiware/scripts
 
-# INJECT DEBUGGING FUNCTION (FIXED OUTPUT)
+# INJECT DEBUGGING FUNCTION
 if ! grep -q "refresh_demo_tokens" "$REAL_HOME/.bashrc"; then
     cat <<EOF >> "$REAL_HOME/.bashrc"
 export INTERNAL_IP=\$(ip route get 1.1.1.1 | awk '{print \$7}')
@@ -283,7 +281,7 @@ wait_for_api "http://keycloak-consumer.${INTERNAL_IP}.nip.io/realms/master"
 register_did "http://til.${INTERNAL_IP}.nip.io/issuer" "$CONSUMER_DID" "[]"
 
 # ==============================================================================
-# 7. PROVIDER & APISIX FIX
+# 7. PROVIDER & APISIX
 # ==============================================================================
 echo -e "${BLUE}--- STEP 5: PROVIDER & ROUTE LOADING ---${NC}"
 setup_ns "provider"
@@ -306,15 +304,32 @@ helm upgrade --install provider-dsc data-space-connector/data-space-connector --
 log_info "Deploying APISIX Configs..."
 mkdir -p /fiware/apisix && cd /fiware/apisix
 wget -qO apisix-values.yaml-template https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/apisix/apisix-values.yaml-template
-# Dashboard Template might be broken for Ingress, we will override it in helm install later
-wget -qO apisix-dashboard.yaml-template https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/apisix/apisix-dashboard.yaml-template
+# Dashboard Template is ignored, we generate it locally below to avoid map/string errors
 wget -qO apisix-secret.yaml https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/apisix/apisix-secret.yaml
 wget -qO apisix-routes-job.yaml-template https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/apisix/apisix-routes-job.yaml-template
 wget -qO opa-configmaps.yaml https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/apisix/opa-configmaps.yaml
 
 sed "s|INTERNAL_IP|$INTERNAL_IP|g" apisix-values.yaml-template > apisix-values.yaml
-sed "s|INTERNAL_IP|$INTERNAL_IP|g" apisix-dashboard.yaml-template > apisix-dashboard.yaml
 sed "s|INTERNAL_IP|$INTERNAL_IP|g" apisix-routes-job.yaml-template > apisix-routes-job.yaml
+
+# --- FIX: GENERATE DASHBOARD YAML LOCALLY ---
+# Dit lost de "map[...]" error op door geen --set te gebruiken voor complexe Ingress
+cat <<EOF > apisix-dashboard.yaml
+image:
+  repository: apache/apisix-dashboard
+  tag: 3.0.1
+  pullPolicy: IfNotPresent
+
+ingress:
+  enabled: true
+  annotations:
+    kubernetes.io/ingress.class: traefik
+  hosts:
+    - host: apisix-dashboard.${INTERNAL_IP}.nip.io
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+EOF
 
 kubectl apply -f opa-configmaps.yaml -n provider
 kubectl apply -f apisix-secret.yaml -n provider
@@ -322,24 +337,16 @@ kubectl apply -f apisix-secret.yaml -n provider
 helm repo add apisix https://charts.apiseven.com ; helm repo update
 helm upgrade --install apisix apisix/apisix -f apisix-values.yaml -n provider
 
-# --- FIX 1: DASHBOARD INGRESS ---
-# Forceer Ingress instellingen via --set om de 404 te voorkomen
+# Install Dashboard with the locally generated CLEAN yaml file
 helm upgrade --install apisix-dashboard apisix/apisix-dashboard \
   -f apisix-dashboard.yaml \
-  --set ingress.enabled=true \
-  --set ingress.hosts[0].host=apisix-dashboard.${INTERNAL_IP}.nip.io \
-  --set ingress.hosts[0].paths[0].path=/ \
-  --set ingress.hosts[0].paths[0].pathType=ImplementationSpecific \
   -n provider
 
 # CRITICAL WAIT: Wait for Provider Pods
 wait_for_ready "provider" 1200
 
-# --- FIX 2: CHECK APISIX ADMIN API AVAILABILITY BEFORE JOB ---
-# The job fails if the Admin API is not ready yet.
+# --- FIX: CHECK APISIX ADMIN API AVAILABILITY BEFORE JOB ---
 echo -e "${BLUE}[WAIT] Waiting for APISIX Admin API to respond...${NC}"
-# We start a port-forward in background to check if the admin api is actually answering
-# We assume standard port 9180 for admin api inside the cluster service
 for i in {1..30}; do
     kubectl port-forward -n provider svc/apisix-admin 9180:9180 > /dev/null 2>&1 &
     PF_PID=$!
