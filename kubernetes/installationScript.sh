@@ -2,7 +2,7 @@
 set -e
 
 # ==============================================================================
-# FIWARE INSTALLER - ROBUST API CHECKS (V14)
+# FIWARE INSTALLER - AUTO-REPAIR & ROBUST (V15)
 # ==============================================================================
 
 # --- DETECT REAL USER ---
@@ -59,10 +59,10 @@ wait_for_ready() {
     done
 }
 
-# --- FUNCTION 2: STRICT API WAIT (V14) ---
+# --- FUNCTION 2: STRICT API WAIT ---
 wait_for_api() {
     local URL=$1
-    local TIMEOUT_SECS=600 # 10 minutes max for app startup
+    local TIMEOUT_SECS=600 
     local START_TIME=$(date +%s)
     
     echo -ne "${BLUE}[WAIT] API: Waiting for $URL ...${NC}"
@@ -77,10 +77,8 @@ wait_for_api() {
             return 1
         fi
 
-        # Get HTTP Code. 000=Down, 503=Unavailable. We want 2xx, 3xx or 4xx.
         local STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 2 "$URL" || echo "000")
 
-        # Check if status is between 200 and 499 (Healthy response)
         if [[ "$STATUS" -ge 200 && "$STATUS" -lt 500 ]]; then
             echo -e " ${GREEN}[OK] (Status: $STATUS)${NC}"
             return 0
@@ -91,18 +89,17 @@ wait_for_api() {
     done
 }
 
-# --- FUNCTION 3: ROBUST REGISTRATION (V14) ---
+# --- FUNCTION 3: ROBUST REGISTRATION ---
 register_did() {
     local URL=$1
     local DID=$2
-    local CREDENTIALS=$3 # JSON array string
+    local CREDENTIALS=$3 
     local ATTEMPT=1
     local MAX_RETRIES=20
 
     echo -e "${BLUE}[ACTION] Registering DID: $DID ...${NC}"
 
     until [ $ATTEMPT -ge $MAX_RETRIES ]; do
-        # We capture the HTTP code AND the body
         RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$URL" \
             --header 'Content-Type: application/json' \
             --data "{\"did\": \"$DID\", \"credentials\": $CREDENTIALS}")
@@ -130,9 +127,21 @@ register_did() {
 # ==============================================================================
 # 1. PREPARATION & INPUT
 # ==============================================================================
+echo -e "${BLUE}[INIT] System Check & Repair...${NC}"
+
+# --- AUTO REPAIR LOCKS (V15 FIX) ---
+if sudo lsof /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then
+    log_warn "Detected locked apt/dpkg. Attempting to clear..."
+    sudo fuser -vki /var/lib/dpkg/lock-frontend || true
+    sudo rm -f /var/lib/dpkg/lock-frontend
+    sudo rm -f /var/lib/dpkg/lock
+    sudo dpkg --configure -a
+fi
+
 echo -e "${BLUE}[INIT] Installing dependencies...${NC}"
-sudo apt-get update > /dev/null 2>&1
-sudo apt-get install -y curl jq inetutils-ping git default-jdk > /dev/null 2>&1
+# Removed "> /dev/null" so you can see errors if they happen
+sudo apt-get update 
+sudo apt-get install -y curl jq inetutils-ping git default-jdk 
 
 clear
 echo -e "${YELLOW}################################################################${NC}"
