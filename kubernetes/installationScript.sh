@@ -2,7 +2,7 @@
 set -e
 
 # ==============================================================================
-# FIWARE INSTALLER - AUTO CLEANUP & FRESH START (V18)
+# FIWARE INSTALLER - FIXED VERSION (APISIX & DEBUG)
 # ==============================================================================
 
 # --- DETECT REAL USER ---
@@ -40,16 +40,8 @@ wait_for_ready() {
         local ELAPSED=$((CURRENT_TIME - START_TIME))
         if [ $ELAPSED -gt $TIMEOUT_SECS ]; then
             log_error "Timeout '$NAMESPACE'!"
-            echo "--- POD STATUS ---"
-            kubectl get pods -n $NAMESPACE
             return 1
         fi
-        
-        # Check for stuck pods
-        if kubectl get pods -n $NAMESPACE --no-headers | grep -q -E "CrashLoopBackOff|ErrImagePull"; then
-             echo -ne "${YELLOW}  -> Retry: Pods are crashing/restarting... ${NC}\r"
-        fi
-
         local PENDING=$(kubectl get pods -n $NAMESPACE --no-headers | grep -v -E "Running|Completed|Error" | wc -l)
         if [ "$PENDING" -eq 0 ]; then
             local HEALTHY=$(kubectl get pods -n $NAMESPACE --no-headers | grep -E "Running|Completed" | wc -l)
@@ -98,38 +90,6 @@ register_did() {
         ATTEMPT=$((ATTEMPT+1))
     done
     log_error "Registration failed." ; return 1
-}
-
-# --- V18 NEW FUNCTION: CLEANUP ---
-# This forces a fresh start for databases to prevent "Locked" or "Corrupt" errors on re-runs
-cleanup_ns_storage() {
-    local NS=$1
-    log_info "Cleaning up old storage in '$NS' to ensure fresh install..."
-    # We delete the PVCs. The next Helm Install will create fresh ones.
-    kubectl delete pvc --all -n "$NS" --ignore-not-found >/dev/null 2>&1 || true
-}
-
-ensure_apisix_routes() {
-    echo -e "${BLUE}[CHECK] Verifying APISIX Routes...${NC}"
-    local PF_PID=""
-    kubectl port-forward -n provider svc/apisix-admin 9180:9180 >/dev/null 2>&1 &
-    PF_PID=$!
-    sleep 3
-    local ADMIN_KEY=$(kubectl get secret apisix-admin-secret -n provider -o jsonpath='{.data.admin-key}' | base64 --decode)
-    [ -z "$ADMIN_KEY" ] && ADMIN_KEY="admin"
-    local ROUTE_COUNT=$(curl -s -H "X-API-KEY: $ADMIN_KEY" http://127.0.0.1:9180/apisix/admin/routes | jq '.list | length' 2>/dev/null || echo "0")
-    kill $PF_PID
-    if [ "$ROUTE_COUNT" -gt 0 ]; then
-        log_success "APISIX has $ROUTE_COUNT routes loaded. Good!"
-    else
-        log_warn "APISIX has 0 routes! The job failed silently. Retrying..."
-        kubectl delete job apisix-route-importer -n provider --ignore-not-found
-        sleep 5
-        kubectl apply -f /fiware/apisix/apisix-routes-job.yaml -n provider
-        kubectl wait --for=condition=complete job/apisix-route-importer -n provider --timeout=120s
-        kubectl rollout restart deployment apisix-dashboard -n provider
-        log_info "Dashboard restarted."
-    fi
 }
 
 # ==============================================================================
@@ -209,7 +169,7 @@ helm upgrade --install my-headlamp headlamp/headlamp -n kube-system
 kubectl patch service my-headlamp -n kube-system -p '{"spec":{"type":"NodePort"}}'
 
 # ==============================================================================
-# 4. SCRIPTS & BASHRC
+# 4. SCRIPTS & BASHRC (FIXED DEBUGGING)
 # ==============================================================================
 export INTERNAL_IP=$(ip route get 1.1.1.1 | awk '{print $7}')
 wget -qO /fiware/scripts/get_credential.sh https://raw.githubusercontent.com/wistefan/deployment-demo/main/scripts/get_credential.sh
@@ -218,33 +178,41 @@ chmod +x /fiware/scripts/*.sh
 sed -i "s|did.json|did.json|g" /fiware/scripts/get_access_token_oid4vp.sh
 chown -R "$REAL_USER:$REAL_USER" /fiware/scripts
 
+# INJECT DEBUGGING FUNCTION (FIXED OUTPUT)
 if ! grep -q "refresh_demo_tokens" "$REAL_HOME/.bashrc"; then
     cat <<EOF >> "$REAL_HOME/.bashrc"
 export INTERNAL_IP=\$(ip route get 1.1.1.1 | awk '{print \$7}')
 headlamp-token() { sudo kubectl create token my-headlamp --namespace kube-system; }
 refresh_demo_tokens() {
-  echo "--- REFRESHING TOKENS (DEBUG MODE) ---"
+  echo "--- REFRESHING TOKENS (VERBOSE MODE) ---"
   export INTERNAL_IP=\$(ip route get 1.1.1.1 | awk '{print \$7}')
   echo "IP: \$INTERNAL_IP"
+  
   export CONSUMER_DID=\$(cat /fiware/consumer-identity/did.json 2>/dev/null | jq '.id' -r || echo "N/A")
   export PROVIDER_DID=\$(cat /fiware/provider-identity/did.json 2>/dev/null | jq '.id' -r || echo "N/A")
   
   echo "Fetching User Credential (Consumer)..."
   export USER_CREDENTIAL=\$(/fiware/scripts/get_credential.sh http://keycloak-consumer.\${INTERNAL_IP}.nip.io user-credential 2>/dev/null)
-  if [ -z "\$USER_CREDENTIAL" ]; then echo "  [!] FAILED. Check Keycloak Consumer URL."; else echo "  [OK] Got Credential."; fi
+  echo " > Credential: \${USER_CREDENTIAL:0:50}..."
 
   echo "Fetching User Credential (Provider)..."
   export USER_CREDENTIAL_PROVIDER=\$(/fiware/scripts/get_credential.sh http://keycloak-provider.\${INTERNAL_IP}.nip.io user-credential 2>/dev/null)
+  echo " > Credential: \${USER_CREDENTIAL_PROVIDER:0:50}..."
   
   if [ -n "\$USER_CREDENTIAL" ]; then
       echo "Fetching Access Token (Consumer)..."
       export ACCESS_TOKEN=\$(/fiware/scripts/get_access_token_oid4vp.sh http://mp-data-service.\${INTERNAL_IP}.nip.io "\$USER_CREDENTIAL" default 2>/dev/null)
-      if [ -z "\$ACCESS_TOKEN" ]; then echo "  [!] FAILED. Check APISIX Routes/Gateway."; else echo "  [OK] Got Token."; fi
+      echo " > Access Token: \${ACCESS_TOKEN:0:50}..."
+  else
+      echo " [!] SKIP Consumer Token (No Credential)"
   fi
   
   if [ -n "\$USER_CREDENTIAL_PROVIDER" ]; then
       echo "Fetching Access Token (Provider)..."
       export PROVIDER_ACCESS_TOKEN=\$(/fiware/scripts/get_access_token_oid4vp.sh http://mp-data-service.\${INTERNAL_IP}.nip.io "\$USER_CREDENTIAL_PROVIDER" default 2>/dev/null)
+      echo " > Provider Token: \${PROVIDER_ACCESS_TOKEN:0:50}..."
+  else
+      echo " [!] SKIP Provider Token (No Credential)"
   fi
   echo "--- DONE ---"
 }
@@ -256,8 +224,6 @@ fi
 # ==============================================================================
 echo -e "${BLUE}--- STEP 3: TRUST ANCHOR ---${NC}"
 setup_ns "trust-anchor"
-cleanup_ns_storage "trust-anchor" # V18 FIX
-
 helm repo add data-space-connector https://fiware.github.io/data-space-connector/
 helm repo update
 wget -qO /fiware/trust-anchor/values.yaml-template https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/trust-anchor/values.yaml-template
@@ -272,8 +238,6 @@ wait_for_api "http://til.${INTERNAL_IP}.nip.io/v4/issuers"
 # ==============================================================================
 echo -e "${BLUE}--- STEP 4: CONSUMER ---${NC}"
 setup_ns "consumer"
-cleanup_ns_storage "consumer" # V18 FIX
-
 cd /fiware/consumer
 mkdir -p /fiware/consumer-identity && cd /fiware/consumer-identity
 openssl ecparam -name prime256v1 -genkey -noout -out private-key.pem
@@ -294,11 +258,10 @@ wait_for_api "http://keycloak-consumer.${INTERNAL_IP}.nip.io/realms/master"
 register_did "http://til.${INTERNAL_IP}.nip.io/issuer" "$CONSUMER_DID" "[]"
 
 # ==============================================================================
-# 7. PROVIDER & APISIX
+# 7. PROVIDER & APISIX FIX
 # ==============================================================================
 echo -e "${BLUE}--- STEP 5: PROVIDER & ROUTE LOADING ---${NC}"
 setup_ns "provider"
-cleanup_ns_storage "provider" # V18 FIX
 
 mkdir -p /fiware/provider-identity && cd /fiware/provider-identity
 openssl ecparam -name prime256v1 -genkey -noout -out private-key.pem
@@ -318,32 +281,65 @@ helm upgrade --install provider-dsc data-space-connector/data-space-connector --
 log_info "Deploying APISIX Configs..."
 mkdir -p /fiware/apisix && cd /fiware/apisix
 wget -qO apisix-values.yaml-template https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/apisix/apisix-values.yaml-template
+# Dashboard Template might be broken for Ingress, we will override it in helm install later
 wget -qO apisix-dashboard.yaml-template https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/apisix/apisix-dashboard.yaml-template
 wget -qO apisix-secret.yaml https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/apisix/apisix-secret.yaml
 wget -qO apisix-routes-job.yaml-template https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/apisix/apisix-routes-job.yaml-template
 wget -qO opa-configmaps.yaml https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/apisix/opa-configmaps.yaml
+
 sed "s|INTERNAL_IP|$INTERNAL_IP|g" apisix-values.yaml-template > apisix-values.yaml
 sed "s|INTERNAL_IP|$INTERNAL_IP|g" apisix-dashboard.yaml-template > apisix-dashboard.yaml
 sed "s|INTERNAL_IP|$INTERNAL_IP|g" apisix-routes-job.yaml-template > apisix-routes-job.yaml
+
 kubectl apply -f opa-configmaps.yaml -n provider
 kubectl apply -f apisix-secret.yaml -n provider
+
 helm repo add apisix https://charts.apiseven.com ; helm repo update
 helm upgrade --install apisix apisix/apisix -f apisix-values.yaml -n provider
-helm upgrade --install apisix-dashboard apisix/apisix-dashboard -f apisix-dashboard.yaml -n provider
 
-# CRITICAL WAIT
+# --- FIX 1: DASHBOARD INGRESS ---
+# Forceer Ingress instellingen via --set om de 404 te voorkomen
+helm upgrade --install apisix-dashboard apisix/apisix-dashboard \
+  -f apisix-dashboard.yaml \
+  --set ingress.enabled=true \
+  --set ingress.hosts[0].host=apisix-dashboard.${INTERNAL_IP}.nip.io \
+  --set ingress.hosts[0].paths[0].path=/ \
+  --set ingress.hosts[0].paths[0].pathType=ImplementationSpecific \
+  -n provider
+
+# CRITICAL WAIT: Wait for Provider Pods
 wait_for_ready "provider" 1200
 
-# V17 FIX: CLEAN, APPLY, VERIFY, REPAIR
-log_info "Loading APISIX Routes..."
+# --- FIX 2: CHECK APISIX ADMIN API AVAILABILITY BEFORE JOB ---
+# The job fails if the Admin API is not ready yet.
+echo -e "${BLUE}[WAIT] Waiting for APISIX Admin API to respond...${NC}"
+# We start a port-forward in background to check if the admin api is actually answering
+# We assume standard port 9180 for admin api inside the cluster service
+for i in {1..30}; do
+    kubectl port-forward -n provider svc/apisix-admin 9180:9180 > /dev/null 2>&1 &
+    PF_PID=$!
+    sleep 2
+    # Check for 401 Unauthorized (Good) or 200 (Good). 000 is Bad.
+    STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 1 "http://localhost:9180/apisix/admin/routes" -H "X-API-KEY: edd1c9f034335f136f87ad84b625c8f1")
+    kill $PF_PID >/dev/null 2>&1
+    
+    if [[ "$STATUS" != "000" ]]; then
+       echo -e " ${GREEN}[OK] APISIX Admin Alive ($STATUS)${NC}"
+       break
+    fi
+    echo -n "."
+    sleep 5
+done
+
+log_info "Ensuring APISIX Routes are loaded (Deleting old job)..."
 kubectl delete job apisix-route-importer -n provider --ignore-not-found
+log_info "Applying Route Job..."
 kubectl apply -f apisix-routes-job.yaml -n provider
-kubectl wait --for=condition=complete job/apisix-route-importer -n provider --timeout=300s || log_warn "Route job timeout (checking via API)..."
 
-# Call the repair function
-ensure_apisix_routes
+# Wait longer for job
+kubectl wait --for=condition=complete job/apisix-route-importer -n provider --timeout=300s || log_warn "Route job did not report complete immediately (check logs if tokens fail)."
 
-# Verify APIs are actually reachable now
+# Verify Trust APIs
 wait_for_api "http://til-provider.${INTERNAL_IP}.nip.io/issuer"
 wait_for_api "http://keycloak-provider.${INTERNAL_IP}.nip.io/realms/master"
 
@@ -411,9 +407,9 @@ echo "URL:             http://apisix-dashboard.$INTERNAL_IP.nip.io/"
 echo "User:            admin"
 echo "Password:        admin"
 echo -e "\n${BLUE}--- 4. NEXT STEPS & HANDY COMMANDS ---${NC}"
-echo "To check why tokens might be missing, run:"
+echo "To check tokens and debug, run:"
 echo -e "  ${GREEN}refresh_demo_tokens${NC}"
-echo "and look at the debug output."
+echo "(This will now show the actual token values)"
 echo ""
 echo "Logging saved to $LOG_FILE"
 echo -e "${GREEN}================================================================${NC}"
