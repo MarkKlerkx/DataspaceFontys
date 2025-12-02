@@ -2,7 +2,7 @@
 set -e
 
 # ==============================================================================
-# FIWARE INSTALLER - ROBUST VERSION (WAIT CHECKS + YAML FIX + TIME SYNC)
+# FIWARE INSTALLER - ROBUST VERSION (FIX: SA RACE CONDITION + DOCKER FEEDBACK)
 # ==============================================================================
 
 # --- DETECT REAL USER ---
@@ -39,7 +39,7 @@ wait_for_rollout() {
     
     echo -e "${BLUE}[WAIT] Waiting for rollout: $DEPLOYMENT in $NS...${NC}"
     # Check if deployment exists first to avoid immediate fail
-    for i in {1..10}; do
+    for i in {1..30}; do
         kubectl get deployment "$DEPLOYMENT" -n "$NS" >/dev/null 2>&1 && break
         sleep 2
     done
@@ -130,13 +130,17 @@ else
 fi
 
 # Validation
+echo -e "${BLUE}[INIT] Validating Docker Credentials...${NC}"
 LOGIN_RESPONSE=$(curl -s -H "Content-Type: application/json" -X POST -d '{"username": "'${MY_DOCKER_USER}'", "password": "'${MY_DOCKER_PASS}'"}' https://hub.docker.com/v2/users/login)
 TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r .token 2>/dev/null)
 
 if [[ "$TOKEN" == "null" || -z "$TOKEN" ]]; then
-    echo -e "${RED}Login Failed.${NC}" ; exit 1
+    echo -e "${RED}Login Failed! Invalid Username or Token.${NC}"
+    echo "Docker response: $LOGIN_RESPONSE" 
+    exit 1
+else
+    log_success "Docker Login Verified for user: $MY_DOCKER_USER"
 fi
-log_success "Docker Login OK."
 
 # ==============================================================================
 # 2. K3S
@@ -160,7 +164,7 @@ chmod 600 "$REAL_HOME/.kube/config"
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
 # ==============================================================================
-# 3. HELM
+# 3. HELM & NAMESPACES
 # ==============================================================================
 echo -e "${BLUE}--- STEP 2: HELM ---${NC}"
 if ! command -v helm &> /dev/null; then curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash; fi
@@ -168,10 +172,30 @@ if ! command -v helm &> /dev/null; then curl https://raw.githubusercontent.com/h
 mkdir -p /fiware/scripts /fiware/trust-anchor /fiware/consumer /fiware/provider /fiware/wallet-identity
 chown -R "$REAL_USER:$REAL_USER" /fiware
 
+# --- UPDATED SETUP_NS FUNCTION (FIX FOR SA NOT FOUND) ---
 setup_ns() {
-    kubectl create ns "$1" --dry-run=client -o yaml | kubectl apply -f -
-    kubectl create secret docker-registry regcred --docker-server=https://index.docker.io/v1/ --docker-username="$MY_DOCKER_USER" --docker-password="$MY_DOCKER_PASS" --docker-email="$MY_DOCKER_EMAIL" -n "$1" --dry-run=client -o yaml | kubectl apply -f -
-    kubectl patch sa default -p '{"imagePullSecrets": [{"name": "regcred"}]}' -n "$1"
+    local NS=$1
+    echo -e "${BLUE}[SETUP] Configuring Namespace: $NS${NC}"
+    
+    # 1. Create Namespace (Ignore existing)
+    kubectl create ns "$NS" --dry-run=client -o yaml | kubectl apply -f -
+    
+    # 2. Create Secret
+    kubectl create secret docker-registry regcred --docker-server=https://index.docker.io/v1/ --docker-username="$MY_DOCKER_USER" --docker-password="$MY_DOCKER_PASS" --docker-email="$MY_DOCKER_EMAIL" -n "$NS" --dry-run=client -o yaml | kubectl apply -f -
+    
+    # 3. CRITICAL FIX: Wait for 'default' ServiceAccount to be created by K8s
+    echo -n "   Waiting for ServiceAccount 'default'..."
+    for i in {1..60}; do
+        if kubectl get sa default -n "$NS" >/dev/null 2>&1; then
+            echo " OK"
+            break
+        fi
+        echo -n "."
+        sleep 2
+    done
+    
+    # 4. Patch
+    kubectl patch sa default -p '{"imagePullSecrets": [{"name": "regcred"}]}' -n "$NS"
 }
 
 setup_ns "kube-system"
