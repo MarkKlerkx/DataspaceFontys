@@ -2,8 +2,8 @@
 set -e
 
 # ==============================================================================
-# FIWARE INSTALLER - VERSION 20 (THE SILVER BULLET)
-# Fixes: Time Sync, JQ check, IP Mismatch, Token Generation (Audience/Exp)
+# FIWARE INSTALLER - VERSION 22 (POLICY VERIFICATION)
+# Fixes: Time Sync, JQ check, IP Mismatch, Token Generation, Policy Check
 # ==============================================================================
 
 # --- DETECT REAL USER ---
@@ -320,7 +320,7 @@ setup_ns "trust-anchor"
 helm repo add data-space-connector https://fiware.github.io/data-space-connector/
 helm repo update
 wget -qO /fiware/trust-anchor/values.yaml-template https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/trust-anchor/values.yaml-template
-sed "s|INTERNAL_IP|$INTERNAL_IP|g" /fiware/trust-anchor/values.yaml-template > /fiware/trust-anchor/values.yaml
+sed -e "s|INTERNAL_IP|$INTERNAL_IP|g" -e "s|192.168.165.211|$INTERNAL_IP|g" /fiware/trust-anchor/values.yaml-template > /fiware/trust-anchor/values.yaml
 helm upgrade --install trust-anchor data-space-connector/trust-anchor --version 0.2.1 -f /fiware/trust-anchor/values.yaml -n trust-anchor
 
 wait_for_ready "trust-anchor" 600
@@ -343,7 +343,7 @@ export CONSUMER_DID=$(cat did.json | jq .id -r)
 chown -R "$REAL_USER:$REAL_USER" /fiware/consumer-identity
 kubectl create secret generic consumer-identity --from-file=/fiware/consumer-identity/cert.pfx -n consumer --dry-run=client -o yaml | kubectl apply -f -
 wget -qO /fiware/consumer/values.yaml-template https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/consumer/values.yaml-template
-sed -e "s|DID_CONSUMER|$CONSUMER_DID|g" -e "s|INTERNAL_IP|$INTERNAL_IP|g" /fiware/consumer/values.yaml-template > /fiware/consumer/values.yaml
+sed -e "s|DID_CONSUMER|$CONSUMER_DID|g" -e "s|INTERNAL_IP|$INTERNAL_IP|g" -e "s|192.168.165.211|$INTERNAL_IP|g" /fiware/consumer/values.yaml-template > /fiware/consumer/values.yaml
 helm upgrade --install consumer-dsc data-space-connector/data-space-connector --version 8.2.22 -f /fiware/consumer/values.yaml -n consumer
 
 wait_for_ready "consumer" 600
@@ -367,7 +367,7 @@ export PROVIDER_DID=$(cat did.json | jq .id -r)
 chown -R "$REAL_USER:$REAL_USER" /fiware/provider-identity
 kubectl create secret generic provider-identity --from-file=/fiware/provider-identity/cert.pfx -n provider --dry-run=client -o yaml | kubectl apply -f -
 wget -qO /fiware/provider/values.yaml-template https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/provider/values.yaml-template
-sed -e "s|DID_PROVIDER|$PROVIDER_DID|g" -e "s|DID_CONSUMER|$CONSUMER_DID|g" -e "s|INTERNAL_IP|$INTERNAL_IP|g" /fiware/provider/values.yaml-template > /fiware/provider/values.yaml
+sed -e "s|DID_PROVIDER|$PROVIDER_DID|g" -e "s|DID_CONSUMER|$CONSUMER_DID|g" -e "s|INTERNAL_IP|$INTERNAL_IP|g" -e "s|192.168.165.211|$INTERNAL_IP|g" /fiware/provider/values.yaml-template > /fiware/provider/values.yaml
 helm upgrade --install provider-dsc data-space-connector/data-space-connector --version 8.2.22 -f /fiware/provider/values.yaml -n provider
 
 # CRITICAL WAIT: Wait for Provider Pods (Keycloak/DB) BEFORE APISIX
@@ -388,9 +388,9 @@ wget -qO apisix-dashboard.yaml-template https://raw.githubusercontent.com/MarkKl
 wget -qO apisix-secret.yaml https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/apisix/apisix-secret.yaml
 wget -qO apisix-routes-job.yaml-template https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/apisix/apisix-routes-job.yaml-template
 wget -qO opa-configmaps.yaml https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/apisix/opa-configmaps.yaml
-sed "s|INTERNAL_IP|$INTERNAL_IP|g" apisix-values.yaml-template > apisix-values.yaml
-sed "s|INTERNAL_IP|$INTERNAL_IP|g" apisix-dashboard.yaml-template > apisix-dashboard.yaml
-sed "s|INTERNAL_IP|$INTERNAL_IP|g" apisix-routes-job.yaml-template > apisix-routes-job.yaml
+sed "s|INTERNAL_IP|$INTERNAL_IP|g" -e "s|192.168.165.211|$INTERNAL_IP|g" apisix-values.yaml-template > apisix-values.yaml
+sed "s|INTERNAL_IP|$INTERNAL_IP|g" -e "s|192.168.165.211|$INTERNAL_IP|g" apisix-dashboard.yaml-template > apisix-dashboard.yaml
+sed "s|INTERNAL_IP|$INTERNAL_IP|g" -e "s|192.168.165.211|$INTERNAL_IP|g" apisix-routes-job.yaml-template > apisix-routes-job.yaml
 kubectl apply -f opa-configmaps.yaml -n provider
 kubectl apply -f apisix-secret.yaml -n provider
 helm repo add apisix https://charts.apiseven.com ; helm repo update
@@ -447,11 +447,40 @@ sudo k3s ctr run --rm --mount type=bind,src=/fiware/wallet-identity,dst=/cert,op
 chmod -R o+rw /fiware/wallet-identity/private-key.pem
 
 # ==============================================================================
-# 9. DATA
+# 9. DATA (FIXED POLICY CREATION & VERIFICATION)
 # ==============================================================================
 echo -e "${BLUE}--- STEP 7: DEMO DATA ---${NC}"
-wait_for_api "http://pap-provider.${INTERNAL_IP}.nip.io/policy"
-curl -s -X 'POST' "http://pap-provider.${INTERNAL_IP}.nip.io/policy" -H 'Content-Type: application/json' -d '{"@context":{"odrl":"http://www.w3.org/ns/odrl/2/"},"@type":"odrl:Policy","odrl:permission":{"odrl:assignee":{"@id":"vc:any"},"odrl:action":{"@id":"odrl:read"}}}'
+
+PAP_URL="http://pap-provider.${INTERNAL_IP}.nip.io/policy"
+
+# 1. Wait for API Availability
+wait_for_api "$PAP_URL"
+
+# 2. Create Policy with strict check (capture HTTP Code)
+echo -e "${BLUE}[ACTION] Creating ODRL Policy...${NC}"
+POLICY_JSON='{"@context":{"odrl":"http://www.w3.org/ns/odrl/2/"},"@type":"odrl:Policy","odrl:permission":{"odrl:assignee":{"@id":"vc:any"},"odrl:action":{"@id":"odrl:read"}}}'
+
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$PAP_URL" \
+    -H 'Content-Type: application/json' \
+    -d "$POLICY_JSON")
+
+if [[ "$HTTP_CODE" -ge 200 && "$HTTP_CODE" -lt 300 ]]; then
+    log_success "Policy created successfully (HTTP $HTTP_CODE)."
+else
+    log_error "Failed to create policy! HTTP Code: $HTTP_CODE"
+    exit 1
+fi
+
+# 3. Verify Policy Existence
+echo -e "${BLUE}[CHECK] Verifying Policy in PAP...${NC}"
+POLICY_LIST=$(curl -s -X GET "$PAP_URL")
+
+if echo "$POLICY_LIST" | grep -q "vc:any"; then
+    log_success "Policy Verified: 'vc:any' rule found in PAP."
+else
+    log_error "Policy verification failed! Rule 'vc:any' not found in: $POLICY_LIST"
+    exit 1
+fi
 
 echo -e "${BLUE}[WAIT] Waiting for Scorpio...${NC}"
 for i in {1..30}; do
