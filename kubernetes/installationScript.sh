@@ -96,12 +96,31 @@ register_did() {
 # 1. SETUP
 # ==============================================================================
 echo -e "${BLUE}[INIT] System Check...${NC}"
+
+# Fix voor eventuele lock files
 if sudo lsof /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then
     sudo fuser -vki /var/lib/dpkg/lock-frontend || true
     sudo rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock
     sudo dpkg --configure -a
 fi
-sudo apt-get update && sudo apt-get install -y curl jq inetutils-ping git default-jdk wget nano
+
+# Installatie
+echo -e "${BLUE}[INIT] Installing dependencies (curl, jq, git, java)...${NC}"
+sudo apt-get update
+sudo apt-get install -y curl jq inetutils-ping git default-jdk wget nano
+
+# --- HARDE CHECK OP JQ ---
+# Soms 'ziet' de shell een nieuw programma niet direct. 'hash -r' ververst dit.
+hash -r 
+
+if ! command -v jq &> /dev/null; then
+    echo -e "${RED}[ERROR] 'jq' is niet correct geïnstalleerd.${NC}"
+    echo -e "${YELLOW}Probeer handmatig: sudo apt-get install -y jq${NC}"
+    exit 1
+else
+    JQ_VERSION=$(jq --version)
+    log_success "Dependencies OK. ($JQ_VERSION)"
+fi
 
 clear
 echo -e "${BLUE}Docker Hub Auth (Required for Rate Limits)${NC}"
