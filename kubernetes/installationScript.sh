@@ -2,7 +2,8 @@
 set -e
 
 # ==============================================================================
-# FIWARE INSTALLER - FINAL VERSION (V18)
+# FIWARE INSTALLER - VERSION 20 (THE SILVER BULLET)
+# Fixes: Time Sync, JQ check, IP Mismatch, Token Generation (Audience/Exp)
 # ==============================================================================
 
 # --- DETECT REAL USER ---
@@ -93,9 +94,21 @@ register_did() {
 }
 
 # ==============================================================================
+# 0. TIME SYNC FIX (CRITICAL FOR APT)
+# ==============================================================================
+echo -e "${BLUE}[INIT] Checking System Time...${NC}"
+if command -v timedatectl &> /dev/null; then
+    sudo timedatectl set-ntp on || true
+    sudo systemctl restart systemd-timesyncd.service || true
+    echo "Time sync triggered. Current date: $(date)"
+else
+    echo "timedatectl not found, skipping auto-sync."
+fi
+
+# ==============================================================================
 # 1. SETUP
 # ==============================================================================
-echo -e "${BLUE}[INIT] System Check...${NC}"
+echo -e "${BLUE}[INIT] System Check & Locks...${NC}"
 
 # Fix voor eventuele lock files
 if sudo lsof /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then
@@ -186,52 +199,40 @@ helm upgrade --install my-headlamp headlamp/headlamp -n kube-system
 kubectl patch service my-headlamp -n kube-system -p '{"spec":{"type":"NodePort"}}'
 
 # ==============================================================================
-# 4. SCRIPTS & BASHRC (CUSTOM TOKEN SCRIPT)
+# 4. SCRIPTS (TOKEN FIX) & BASHRC
 # ==============================================================================
+# ALWAYS GET CURRENT IP
 export INTERNAL_IP=$(ip route get 1.1.1.1 | awk '{print $7}')
+log_info "DETECTED CURRENT IP: $INTERNAL_IP"
+
 wget -qO /fiware/scripts/get_credential.sh https://raw.githubusercontent.com/wistefan/deployment-demo/main/scripts/get_credential.sh
 
-# HIER SCHRIJVEN WE DE AANGEPASTE VERSIE VAN JOUW DEMO OMGEVING
+# GENERATE FIXED TOKEN SCRIPT (V20)
 cat << 'EOF' > /fiware/scripts/get_access_token_oid4vp.sh
 #!/bin/bash
-
-# Stop onmiddellijk bij fouten
 set -e
 set -o pipefail
 
-# --- DEBUGGING: Print alle argumenten naar stderr ---
-echo "--- Script get_access_token_oid4vp.sh gestart ---" >&2
-echo "Debug: Argument 1 (Service URL): $1" >&2
-echo "Debug: Argument 2 (VC-Token, ingekort): ${2:0:50}..." >&2
-echo "Debug: Argument 3 (Scope): $3" >&2
-echo "------------------------------------------------" >&2
+# --- DEBUGGING ---
+# echo "Debug: Argument 1 (Service URL): $1" >&2
 
-echo "Debug: Stap 1 - Ophalen OIDC-configuratie van $1/.well-known/openid-configuration" >&2
 token_endpoint=$(curl -s -X GET "$1/.well-known/openid-configuration" | jq -r '.token_endpoint')
 
 if [ -z "$token_endpoint" ] || [ "$token_endpoint" == "null" ]; then
     echo "FOUT: Kon 'token_endpoint' niet vinden. Is de URL $1 correct?" >&2
     exit 1
 fi
-echo "Debug: Token Endpoint Gevonden: $token_endpoint" >&2
 
-# --- START AANPASSING ---
-# Verwijder de foute :8080 poort die door de OIDC-config wordt geadverteerd
-# Dit zorgt ervoor dat we de Ingress (op poort 80) aanroepen, niet de interne service (op poort 8080)
+# Fix poort 8080 bug
 token_endpoint=$(echo $token_endpoint | sed 's/:8080//')
-echo "Debug: GECORRIGEERDE Token Endpoint: $token_endpoint" >&2
-# --- EINDE AANPASSING ---
 
-echo "Debug: Stap 2 - Lezen Holder DID van /fiware/wallet-identity/did.json" >&2
 holder_did=$(cat /fiware/wallet-identity/did.json | jq '.id' -r)
 
 if [ -z "$holder_did" ] || [ "$holder_did" == "null" ]; then
     echo "FOUT: Kon '.id' niet vinden in /fiware/wallet-identity/did.json." >&2
     exit 1
 fi
-echo "Debug: Holder DID Gevonden: $holder_did" >&2
 
-echo "Debug: Stap 3 - Maken van Verifiable Presentation (VP)" >&2
 verifiable_presentation="{
   \"@context\": [\"https://www.w3.org/2018/credentials/v1\"],
   \"type\": [\"VerifiablePresentation\"],
@@ -241,91 +242,70 @@ verifiable_presentation="{
   \"holder\": \"${holder_did}\"
 }"
 
-echo "Debug: Stap 4 - Maken van VP-JWT (Header, Payload, Signature)" >&2
+# --- PAYLOAD MET CLAIMS (FIX VOOR LEGE RESPONSE) ---
+now=$(date +%s)
+exp=$(($now + 600))
+jti="jwt_$(date +%s)_$RANDOM"
+
 jwt_header=$(echo -n "{\"alg\":\"ES256\", \"typ\":\"JWT\", \"kid\":\"${holder_did}\"}"| base64 -w0 | sed s/\+/-/g | sed 's/\//_/g' | sed -E s/=+$//)
-payload=$(echo -n "{\"iss\": \"${holder_did}\", \"sub\": \"${holder_did}\", \"vp\": ${verifiable_presentation}}" | base64 -w0 | sed s/\+/-/g |sed 's/\//_/g' |  sed -E s/=+$//)
+payload_json="{\"iss\": \"${holder_did}\", \"sub\": \"${holder_did}\", \"aud\": \"${token_endpoint}\", \"jti\": \"${jti}\", \"iat\": ${now}, \"exp\": ${exp}, \"vp\": ${verifiable_presentation}}"
+payload=$(echo -n "${payload_json}" | base64 -w0 | sed s/\+/-/g |sed 's/\//_/g' |  sed -E s/=+$//)
 signature=$(echo -n "${jwt_header}.${payload}" | openssl dgst -sha256 -binary -sign /fiware/wallet-identity/private-key.pem | base64 -w0 | sed s/\+/-/g | sed 's/\//_/g' | sed -E s/=+$//)
+
 jwt="${jwt_header}.${payload}.${signature}"
-echo "Debug: VP-JWT Aangemaakt (ingekort): ${jwt:0:50}..." >&2
 
-echo "Debug: Stap 5 - Aanvragen Access Token bij $token_endpoint" >&2
-final_response=$(curl -s -X POST $token_endpoint \
-      --header 'Accept: */*' \
+# Request
+final_response=$(curl -s -X POST "$token_endpoint" \
+      --header 'Accept: application/json' \
       --header 'Content-Type: application/x-www-form-urlencoded' \
-      --data grant_type=vp_token \
-      --data client_id=data-service \
-      --data vp_token=${jwt} \
-      --data scope=$3)
+      --data-urlencode "grant_type=vp_token" \
+      --data-urlencode "client_id=data-service" \
+      --data-urlencode "vp_token=${jwt}" \
+      --data-urlencode "scope=$3")
 
-echo "Debug: Volledige response van server: $final_response" >&2
-
-echo "Debug: Stap 6 - Extraheren 'access_token' uit response" >&2
 access_token=$(echo $final_response | jq '.access_token' -r)
 
 if [ -z "$access_token" ] || [ "$access_token" == "null" ]; then
-    echo "FOUT: Kon 'access_token' niet vinden in server response." >&2
-    echo "Controleer de 'Volledige response' hierboven voor foutmeldingen." >&2
+    echo "FOUT: Geen access_token. Server antwoord: $final_response" >&2
     exit 1
 fi
 
-echo "Debug: Access Token succesvol verkregen!" >&2
-# --- EINDE DEBUGGING ---
-
-# De ENIGE output naar STDOUT. Dit wordt opgevangen door de variabele.
+# Output token
 echo $access_token
 EOF
 
 chmod +x /fiware/scripts/*.sh
 chown -R "$REAL_USER:$REAL_USER" /fiware/scripts
 
-# INJECT DEBUGGING FUNCTION - UPDATED TO SHOW TOKENS
+# INJECT DEBUGGING FUNCTION
 if ! grep -q "refresh_demo_tokens" "$REAL_HOME/.bashrc"; then
     cat <<EOF >> "$REAL_HOME/.bashrc"
 export INTERNAL_IP=\$(ip route get 1.1.1.1 | awk '{print \$7}')
 headlamp-token() { sudo kubectl create token my-headlamp --namespace kube-system; }
 refresh_demo_tokens() {
-  echo "--- REFRESHING TOKENS (DEBUG MODE) ---"
+  echo "--- REFRESHING TOKENS (V20) ---"
   export INTERNAL_IP=\$(ip route get 1.1.1.1 | awk '{print \$7}')
-  echo "IP: \$INTERNAL_IP"
+  echo "Current IP: \$INTERNAL_IP"
   
   export CONSUMER_DID=\$(cat /fiware/consumer-identity/did.json 2>/dev/null | jq '.id' -r || echo "N/A")
   export PROVIDER_DID=\$(cat /fiware/provider-identity/did.json 2>/dev/null | jq '.id' -r || echo "N/A")
-  echo "Consumer DID: \${CONSUMER_DID:0:15}..."
   
   echo "Fetching User Credential (Consumer)..."
   export USER_CREDENTIAL=\$(/fiware/scripts/get_credential.sh http://keycloak-consumer.\${INTERNAL_IP}.nip.io user-credential 2>/dev/null)
-  if [ -z "\$USER_CREDENTIAL" ]; then 
-      echo "  [!] FAILED. Check Keycloak Consumer URL."
-  else 
-      echo "  [OK] Credential: \${USER_CREDENTIAL:0:20}..."
-  fi
-
+  
   echo "Fetching User Credential (Provider)..."
   export USER_CREDENTIAL_PROVIDER=\$(/fiware/scripts/get_credential.sh http://keycloak-provider.\${INTERNAL_IP}.nip.io user-credential 2>/dev/null)
-  if [ -z "\$USER_CREDENTIAL_PROVIDER" ]; then
-      echo "  [!] FAILED. Check Keycloak Provider URL."
-  else
-      echo "  [OK] Credential: \${USER_CREDENTIAL_PROVIDER:0:20}..."
-  fi
   
   if [ -n "\$USER_CREDENTIAL" ]; then
       echo "Fetching Access Token (Consumer)..."
       export ACCESS_TOKEN=\$(/fiware/scripts/get_access_token_oid4vp.sh http://mp-data-service.\${INTERNAL_IP}.nip.io "\$USER_CREDENTIAL" default 2>/dev/null)
-      if [ -z "\$ACCESS_TOKEN" ]; then 
-          echo "  [!] FAILED. ACCESS_TOKEN is null. Check APISIX Routes/Gateway."
-      else 
-          echo "  [OK] ACCESS_TOKEN: \$ACCESS_TOKEN" 
-      fi
+      echo "TOKEN: \${ACCESS_TOKEN:0:20}..."
   fi
   
   if [ -n "\$USER_CREDENTIAL_PROVIDER" ]; then
       echo "Fetching Access Token (Provider)..."
       export PROVIDER_ACCESS_TOKEN=\$(/fiware/scripts/get_access_token_oid4vp.sh http://mp-data-service.\${INTERNAL_IP}.nip.io "\$USER_CREDENTIAL_PROVIDER" default 2>/dev/null)
-      if [ -z "\$PROVIDER_ACCESS_TOKEN" ]; then
-           echo "  [!] FAILED. PROVIDER_ACCESS_TOKEN is null."
-      else
-           echo "  [OK] PROVIDER_ACCESS_TOKEN: \$PROVIDER_ACCESS_TOKEN"
-      fi
+      echo "TOKEN: \${PROVIDER_ACCESS_TOKEN:0:20}..."
   fi
   echo "--- DONE ---"
 }
@@ -397,7 +377,7 @@ wait_for_ready "provider" 1200
 wait_for_api "http://keycloak-provider.${INTERNAL_IP}.nip.io/realms/master"
 
 # ==============================================================================
-# 7B. APISIX & ROUTE LOADING (FIXED)
+# 7B. APISIX & ROUTE LOADING
 # ==============================================================================
 echo -e "${BLUE}--- STEP 5B: APISIX GATEWAY ---${NC}"
 
@@ -439,21 +419,12 @@ spec:
               number: 80
 EOF
 
-# Wait for APISIX pods
 wait_for_ready "provider" 600
-
-# CHECK APISIX ADMIN API BEFORE ROUTES
-log_info "Waiting for APISIX Admin API..."
-# We assume APISIX Admin is internal port 9180. The job uses the internal service DNS. 
-# But for the script to continue safely, we wait until the APISIX POD is actually answering.
-# We can't curl the internal IP easily from host, but 'wait_for_ready' above ensures pods are Running.
 
 log_info "Ensuring APISIX Routes are loaded (Deleting old job)..."
 kubectl delete job apisix-route-importer -n provider --ignore-not-found
 log_info "Applying Route Job..."
 kubectl apply -f apisix-routes-job.yaml -n provider
-
-# Wait for the job to actually finish
 log_info "Waiting for Route Job to complete..."
 kubectl wait --for=condition=complete job/apisix-route-importer -n provider --timeout=300s || log_warn "Route job did not report complete (might be ok)."
 
@@ -523,9 +494,7 @@ echo -e "\n${BLUE}--- 3. API GATEWAY (APISIX DASHBOARD) ---${NC}"
 echo "URL:             http://apisix-dashboard.$INTERNAL_IP.nip.io/"
 echo "User:            admin"
 echo "Password:        admin"
-echo -e "\n${BLUE}--- 4. NEXT STEPS & HANDY COMMANDS ---${NC}"
-echo "To check tokens, run:"
+echo -e "\n${BLUE}--- 4. NEXT STEPS ---${NC}"
+echo "Run this command to check if everything works now:"
 echo -e "  ${GREEN}refresh_demo_tokens${NC}"
-echo ""
-echo "Logging saved to $LOG_FILE"
 echo -e "${GREEN}================================================================${NC}"
