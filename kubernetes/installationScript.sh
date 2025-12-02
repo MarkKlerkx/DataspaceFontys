@@ -2,8 +2,8 @@
 set -e
 
 # ==============================================================================
-# FIWARE INSTALLER - VERSION 22 (POLICY VERIFICATION)
-# Fixes: Time Sync, JQ check, IP Mismatch, Token Generation, Policy Check
+# FIWARE INSTALLER - VERSION 23 (FINAL FIX)
+# Fixes: SED syntax error in APISIX step + Includes Policy Verification
 # ==============================================================================
 
 # --- DETECT REAL USER ---
@@ -388,9 +388,12 @@ wget -qO apisix-dashboard.yaml-template https://raw.githubusercontent.com/MarkKl
 wget -qO apisix-secret.yaml https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/apisix/apisix-secret.yaml
 wget -qO apisix-routes-job.yaml-template https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/apisix/apisix-routes-job.yaml-template
 wget -qO opa-configmaps.yaml https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/apisix/opa-configmaps.yaml
-sed "s|INTERNAL_IP|$INTERNAL_IP|g" -e "s|192.168.165.211|$INTERNAL_IP|g" apisix-values.yaml-template > apisix-values.yaml
-sed "s|INTERNAL_IP|$INTERNAL_IP|g" -e "s|192.168.165.211|$INTERNAL_IP|g" apisix-dashboard.yaml-template > apisix-dashboard.yaml
-sed "s|INTERNAL_IP|$INTERNAL_IP|g" -e "s|192.168.165.211|$INTERNAL_IP|g" apisix-routes-job.yaml-template > apisix-routes-job.yaml
+
+# FIX V23: Added '-e' flags to prevent file not found errors
+sed -e "s|INTERNAL_IP|$INTERNAL_IP|g" -e "s|192.168.165.211|$INTERNAL_IP|g" apisix-values.yaml-template > apisix-values.yaml
+sed -e "s|INTERNAL_IP|$INTERNAL_IP|g" -e "s|192.168.165.211|$INTERNAL_IP|g" apisix-dashboard.yaml-template > apisix-dashboard.yaml
+sed -e "s|INTERNAL_IP|$INTERNAL_IP|g" -e "s|192.168.165.211|$INTERNAL_IP|g" apisix-routes-job.yaml-template > apisix-routes-job.yaml
+
 kubectl apply -f opa-configmaps.yaml -n provider
 kubectl apply -f apisix-secret.yaml -n provider
 helm repo add apisix https://charts.apiseven.com ; helm repo update
