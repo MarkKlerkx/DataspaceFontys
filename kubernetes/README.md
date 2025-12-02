@@ -3,21 +3,26 @@ This folder contains parts of the following repository: https://github.com/wiste
 ------------------------------------------------------------------------------
 
 To install the demo environment follow the instructions below:
-1. Get docker credentials.To able to download the container images without any restrictions you have to create a Docker Hub account.
 
-2. Afterward you have to create an access token
+1. Get docker credentials.
+   To able to download the container images without any restrictions you have to create a Docker Hub account.
+
+2. Afterwards you have to create an access token
  
-3. Server installation and configuration:	Linux Ubuntu 25.04 server
+3. Server installation and configuration:
+   * Linux Ubuntu 25.04 server
+   * Ubuntu Server (Minimized)
+   * Set static ip-address
+   * Enable OpenSSH Server
 
-Ubuntu Server (Minimized)
+4. Server credentials:
+   * Loginname: dataspace-admin
+   * Password: F0nty$2026!@
 
-Set static ip-address
-
-Enable OpenSSH Server
-Server credentials	Loginname: dataspace-admin
-Password: F0nty$2026!@
-Make directories	sudo mkdir /fiware
+5. Make directories	
+sudo mkdir /fiware
 sudo mkdir /fiware/scripts
+
 Get installation script	cd /fiware/scripts
 
 sudo wget raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/installationScript.sh
