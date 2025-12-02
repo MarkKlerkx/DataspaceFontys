@@ -2,9 +2,28 @@
 set -e
 
 # ==============================================================================
-# FIWARE INSTALLER - VERSION 23 (FINAL FIX)
-# Fixes: SED syntax error in APISIX step + Includes Policy Verification
+# FIWARE INSTALLER - VERSION 25 (ROBUST IP & FULL POLICY)
+# Fixes: IP Detection (hostname -I), PAP HTTP 500 (Full JSON), Time Sync
 # ==============================================================================
+
+# --- 1. DETECT ROBUST IP (CRITICAL FIX) ---
+# We doen dit direct aan het begin.
+echo "--- DETECTING IP ---"
+CURRENT_IP=$(hostname -I | awk '{print $1}')
+
+# Fallback als hostname -I faalt
+if [ -z "$CURRENT_IP" ]; then
+    CURRENT_IP=$(ip route get 1.1.1.1 | awk '{print $7}')
+fi
+
+# Hard fail als het nog steeds leeg is
+if [ -z "$CURRENT_IP" ]; then
+    echo "ERROR: Could not detect IP address! installation aborted."
+    exit 1
+fi
+
+export INTERNAL_IP=$CURRENT_IP
+echo "DETECTED IP: $INTERNAL_IP"
 
 # --- DETECT REAL USER ---
 if [ $SUDO_USER ]; then
@@ -94,7 +113,7 @@ register_did() {
 }
 
 # ==============================================================================
-# 0. TIME SYNC FIX (CRITICAL FOR APT)
+# 0. TIME SYNC FIX
 # ==============================================================================
 echo -e "${BLUE}[INIT] Checking System Time...${NC}"
 if command -v timedatectl &> /dev/null; then
@@ -110,23 +129,20 @@ fi
 # ==============================================================================
 echo -e "${BLUE}[INIT] System Check & Locks...${NC}"
 
-# Fix voor eventuele lock files
 if sudo lsof /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then
     sudo fuser -vki /var/lib/dpkg/lock-frontend || true
     sudo rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock
     sudo dpkg --configure -a
 fi
 
-# Installatie
 echo -e "${BLUE}[INIT] Installing dependencies (curl, jq, git, java)...${NC}"
 sudo apt-get update
 sudo apt-get install -y curl jq inetutils-ping git default-jdk wget nano
 
-# --- HARDE CHECK OP JQ ---
+# HARDE CHECK OP JQ
 hash -r 
 if ! command -v jq &> /dev/null; then
     echo -e "${RED}[ERROR] 'jq' is niet correct geïnstalleerd.${NC}"
-    echo -e "${YELLOW}Probeer handmatig: sudo apt-get install -y jq${NC}"
     exit 1
 else
     JQ_VERSION=$(jq --version)
@@ -143,7 +159,6 @@ else
     echo -e "${RED}Interactive mode required.${NC}" ; exit 1
 fi
 
-# Validation
 LOGIN_RESPONSE=$(curl -s -H "Content-Type: application/json" -X POST -d '{"username": "'${MY_DOCKER_USER}'", "password": "'${MY_DOCKER_PASS}'"}' https://hub.docker.com/v2/users/login)
 if [[ $(echo $LOGIN_RESPONSE | jq -r .token) == "null" ]]; then
     echo -e "${RED}Login Failed.${NC}" ; exit 1
@@ -201,20 +216,13 @@ kubectl patch service my-headlamp -n kube-system -p '{"spec":{"type":"NodePort"}
 # ==============================================================================
 # 4. SCRIPTS (TOKEN FIX) & BASHRC
 # ==============================================================================
-# ALWAYS GET CURRENT IP
-export INTERNAL_IP=$(ip route get 1.1.1.1 | awk '{print $7}')
-log_info "DETECTED CURRENT IP: $INTERNAL_IP"
-
 wget -qO /fiware/scripts/get_credential.sh https://raw.githubusercontent.com/wistefan/deployment-demo/main/scripts/get_credential.sh
 
-# GENERATE FIXED TOKEN SCRIPT (V20)
+# GENERATE FIXED TOKEN SCRIPT
 cat << 'EOF' > /fiware/scripts/get_access_token_oid4vp.sh
 #!/bin/bash
 set -e
 set -o pipefail
-
-# --- DEBUGGING ---
-# echo "Debug: Argument 1 (Service URL): $1" >&2
 
 token_endpoint=$(curl -s -X GET "$1/.well-known/openid-configuration" | jq -r '.token_endpoint')
 
@@ -280,11 +288,14 @@ chown -R "$REAL_USER:$REAL_USER" /fiware/scripts
 # INJECT DEBUGGING FUNCTION
 if ! grep -q "refresh_demo_tokens" "$REAL_HOME/.bashrc"; then
     cat <<EOF >> "$REAL_HOME/.bashrc"
-export INTERNAL_IP=\$(ip route get 1.1.1.1 | awk '{print \$7}')
+# Robust IP Detection
+INTERNAL_IP=\$(hostname -I | awk '{print \$1}')
+if [ -z "\$INTERNAL_IP" ]; then INTERNAL_IP=\$(ip route get 1.1.1.1 | awk '{print \$7}'); fi
+export INTERNAL_IP
+
 headlamp-token() { sudo kubectl create token my-headlamp --namespace kube-system; }
 refresh_demo_tokens() {
-  echo "--- REFRESHING TOKENS (V20) ---"
-  export INTERNAL_IP=\$(ip route get 1.1.1.1 | awk '{print \$7}')
+  echo "--- REFRESHING TOKENS (V25) ---"
   echo "Current IP: \$INTERNAL_IP"
   
   export CONSUMER_DID=\$(cat /fiware/consumer-identity/did.json 2>/dev/null | jq '.id' -r || echo "N/A")
@@ -450,7 +461,7 @@ sudo k3s ctr run --rm --mount type=bind,src=/fiware/wallet-identity,dst=/cert,op
 chmod -R o+rw /fiware/wallet-identity/private-key.pem
 
 # ==============================================================================
-# 9. DATA (FIXED POLICY CREATION & VERIFICATION)
+# 9. DATA (FIXED POLICY CREATION with FULL JSON TO PREVENT 500 ERROR)
 # ==============================================================================
 echo -e "${BLUE}--- STEP 7: DEMO DATA ---${NC}"
 
@@ -459,18 +470,62 @@ PAP_URL="http://pap-provider.${INTERNAL_IP}.nip.io/policy"
 # 1. Wait for API Availability
 wait_for_api "$PAP_URL"
 
-# 2. Create Policy with strict check (capture HTTP Code)
-echo -e "${BLUE}[ACTION] Creating ODRL Policy...${NC}"
-POLICY_JSON='{"@context":{"odrl":"http://www.w3.org/ns/odrl/2/"},"@type":"odrl:Policy","odrl:permission":{"odrl:assignee":{"@id":"vc:any"},"odrl:action":{"@id":"odrl:read"}}}'
+# 2. Create Policy with FULL JSON STRUCTURE
+echo -e "${BLUE}[ACTION] Creating ODRL Policy (Full JSON)...${NC}"
+
+# We use cat <<EOF to handle quotes safely
+cat <<EOF > /tmp/policy.json
+{
+  "@context": {
+    "dc": "http://purl.org/dc/elements/1.1/",
+    "dct": "http://purl.org/dc/terms/",
+    "owl": "http://www.w3.org/2002/07/owl#",
+    "odrl": "http://www.w3.org/ns/odrl/2/",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "skos": "http://www.w3.org/2004/02/skos/core#"
+  },
+  "@id": "https://mp-operation.org/policy/common/type",
+  "@type": "odrl:Policy",
+  "odrl:uid": "https://mp-operation.org/policy/common/type",
+  "odrl:permission": {
+    "odrl:assigner": {
+      "@id": "https://www.mp-operation.org/"
+    },
+    "odrl:target": {
+      "@type": "odrl:AssetCollection",
+      "odrl:source": "urn:asset",
+      "odrl:refinement": [
+        {
+          "@type": "odrl:Constraint",
+          "odrl:leftOperand": "ngsi-ld:entityType",
+          "odrl:operator": {
+            "@id": "odrl:eq"
+          },
+          "odrl:rightOperand": "EnergyReport"
+        }
+      ]
+    },
+    "odrl:assignee": {
+      "@id": "vc:any"
+    },
+    "odrl:action": {
+      "@id": "odrl:read"
+    }
+  }
+}
+EOF
 
 HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$PAP_URL" \
     -H 'Content-Type: application/json' \
-    -d "$POLICY_JSON")
+    -d @/tmp/policy.json)
 
 if [[ "$HTTP_CODE" -ge 200 && "$HTTP_CODE" -lt 300 ]]; then
     log_success "Policy created successfully (HTTP $HTTP_CODE)."
+elif [[ "$HTTP_CODE" -eq 409 ]]; then
+    log_warn "Policy already exists (HTTP 409). Continuing."
 else
     log_error "Failed to create policy! HTTP Code: $HTTP_CODE"
+    echo "Check /tmp/policy.json for payload details."
     exit 1
 fi
 
