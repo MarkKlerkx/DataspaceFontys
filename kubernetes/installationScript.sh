@@ -101,7 +101,7 @@ if sudo lsof /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then
     sudo rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock
     sudo dpkg --configure -a
 fi
-sudo apt-get update && sudo apt-get install -y curl jq inetutils-ping git default-jdk
+sudo apt-get update && sudo apt-get install -y curl jq inetutils-ping git default-jdk wget nano
 
 clear
 echo -e "${BLUE}Docker Hub Auth (Required for Rate Limits)${NC}"
