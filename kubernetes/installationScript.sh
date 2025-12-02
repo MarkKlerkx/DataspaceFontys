@@ -2,7 +2,7 @@
 set -e
 
 # ==============================================================================
-# FIWARE INSTALLER - FIXED VERSION (DASHBOARD INGRESS FIX + JQ)
+# FIWARE INSTALLER - ROBUST VERSION (WAIT CHECKS + YAML FIX + TIME SYNC)
 # ==============================================================================
 
 # --- DETECT REAL USER ---
@@ -29,29 +29,26 @@ log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# --- WAIT FUNCTIONS ---
-wait_for_ready() {
-    local NAMESPACE=$1
-    local TIMEOUT_SECS=$2
-    local START_TIME=$(date +%s)
-    echo -e "${BLUE}[WAIT] Watching namespace '$NAMESPACE'...${NC}"
-    while true; do
-        local CURRENT_TIME=$(date +%s)
-        local ELAPSED=$((CURRENT_TIME - START_TIME))
-        if [ $ELAPSED -gt $TIMEOUT_SECS ]; then
-            log_error "Timeout '$NAMESPACE'!"
-            return 1
-        fi
-        local PENDING=$(kubectl get pods -n $NAMESPACE --no-headers | grep -v -E "Running|Completed|Error" | wc -l)
-        if [ "$PENDING" -eq 0 ]; then
-            local HEALTHY=$(kubectl get pods -n $NAMESPACE --no-headers | grep -E "Running|Completed" | wc -l)
-            if [ "$HEALTHY" -gt 0 ]; then
-                log_success "Namespace '$NAMESPACE' active!"
-                return 0
-            fi
-        fi
-        sleep 5
+# --- ROBUST WAIT FUNCTIONS ---
+
+# Wacht tot een specifieke Deployment helemaal klaar is
+wait_for_rollout() {
+    local NS=$1
+    local DEPLOYMENT=$2
+    local TIMEOUT=600s
+    
+    echo -e "${BLUE}[WAIT] Waiting for rollout: $DEPLOYMENT in $NS...${NC}"
+    # Check if deployment exists first to avoid immediate fail
+    for i in {1..10}; do
+        kubectl get deployment "$DEPLOYMENT" -n "$NS" >/dev/null 2>&1 && break
+        sleep 2
     done
+
+    if ! kubectl rollout status deployment/"$DEPLOYMENT" -n "$NS" --timeout=$TIMEOUT; then
+        log_error "Deployment $DEPLOYMENT failed to become ready."
+        return 1
+    fi
+    log_success "$DEPLOYMENT is ready."
 }
 
 wait_for_api() {
@@ -93,11 +90,11 @@ register_did() {
 }
 
 # ==============================================================================
-# 1. SETUP & TOOLS INSTALLATION
+# 1. SETUP & TOOLS & TIME
 # ==============================================================================
 echo -e "${BLUE}[INIT] System Check...${NC}"
 
-# --- FIX TIME SYNC (Prevent APT errors) ---
+# --- FIX TIME SYNC ---
 sudo timedatectl set-ntp off
 sudo timedatectl set-ntp on
 
@@ -112,20 +109,15 @@ echo -e "${BLUE}[INIT] Installing prerequisites...${NC}"
 sudo apt-get update
 sudo apt-get install -y curl jq inetutils-ping git default-jdk
 
-# FIX: Refresh shell hash table to ensure 'jq' is found immediately
 hash -r 
 
-# FIX: Verify JQ installation
+# Verify JQ
 if ! command -v jq &> /dev/null; then
-    log_warn "JQ not found after install. Retrying..."
-    sudo apt-get install -y jq
-    hash -r
+    sudo apt-get install -y jq ; hash -r
 fi
 if ! command -v jq &> /dev/null; then
-    log_error "Critical: 'jq' could not be installed. Exiting."
-    exit 1
+    log_error "Critical: 'jq' missing." ; exit 1
 fi
-log_success "Prerequisites installed (jq detected)."
 
 clear
 echo -e "${BLUE}Docker Hub Auth (Required for Rate Limits)${NC}"
@@ -142,9 +134,7 @@ LOGIN_RESPONSE=$(curl -s -H "Content-Type: application/json" -X POST -d '{"usern
 TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r .token 2>/dev/null)
 
 if [[ "$TOKEN" == "null" || -z "$TOKEN" ]]; then
-    echo -e "${RED}Login Failed. Check credentials.${NC}" 
-    echo "Response: $LOGIN_RESPONSE"
-    exit 1
+    echo -e "${RED}Login Failed.${NC}" ; exit 1
 fi
 log_success "Docker Login OK."
 
@@ -160,8 +150,6 @@ EOF
 
 if ! command -v k3s &> /dev/null; then
     curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--write-kubeconfig-mode 644" sh -
-else
-    log_info "K3s installed."
 fi
 
 mkdir -p "$REAL_HOME/.kube"
@@ -170,9 +158,6 @@ cp /etc/rancher/k3s/k3s.yaml "$REAL_HOME/.kube/config"
 chown -R "$REAL_USER:$REAL_USER" "$REAL_HOME/.kube"
 chmod 600 "$REAL_HOME/.kube/config"
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-
-log_info "Waiting for K3s..."
-for i in {1..60}; do kubectl get nodes 2>/dev/null | grep -q "Ready" && break; sleep 2; done
 
 # ==============================================================================
 # 3. HELM
@@ -186,15 +171,13 @@ chown -R "$REAL_USER:$REAL_USER" /fiware
 setup_ns() {
     kubectl create ns "$1" --dry-run=client -o yaml | kubectl apply -f -
     kubectl create secret docker-registry regcred --docker-server=https://index.docker.io/v1/ --docker-username="$MY_DOCKER_USER" --docker-password="$MY_DOCKER_PASS" --docker-email="$MY_DOCKER_EMAIL" -n "$1" --dry-run=client -o yaml | kubectl apply -f -
-    for i in {1..30}; do kubectl get sa default -n "$1" >/dev/null 2>&1 && break; sleep 2; done
     kubectl patch sa default -p '{"imagePullSecrets": [{"name": "regcred"}]}' -n "$1"
 }
 
 setup_ns "kube-system"
 helm repo add headlamp https://kubernetes-sigs.github.io/headlamp/
 helm repo update
-helm upgrade --install my-headlamp headlamp/headlamp -n kube-system
-kubectl patch service my-headlamp -n kube-system -p '{"spec":{"type":"NodePort"}}'
+helm upgrade --install my-headlamp headlamp/headlamp -n kube-system --set service.type=NodePort
 
 # ==============================================================================
 # 4. SCRIPTS & BASHRC
@@ -206,42 +189,23 @@ chmod +x /fiware/scripts/*.sh
 sed -i "s|did.json|did.json|g" /fiware/scripts/get_access_token_oid4vp.sh
 chown -R "$REAL_USER:$REAL_USER" /fiware/scripts
 
-# INJECT DEBUGGING FUNCTION
 if ! grep -q "refresh_demo_tokens" "$REAL_HOME/.bashrc"; then
     cat <<EOF >> "$REAL_HOME/.bashrc"
 export INTERNAL_IP=\$(ip route get 1.1.1.1 | awk '{print \$7}')
 headlamp-token() { sudo kubectl create token my-headlamp --namespace kube-system; }
 refresh_demo_tokens() {
-  echo "--- REFRESHING TOKENS (VERBOSE MODE) ---"
+  echo "--- REFRESHING TOKENS ---"
   export INTERNAL_IP=\$(ip route get 1.1.1.1 | awk '{print \$7}')
-  echo "IP: \$INTERNAL_IP"
-  
   export CONSUMER_DID=\$(cat /fiware/consumer-identity/did.json 2>/dev/null | jq '.id' -r || echo "N/A")
   export PROVIDER_DID=\$(cat /fiware/provider-identity/did.json 2>/dev/null | jq '.id' -r || echo "N/A")
-  
-  echo "Fetching User Credential (Consumer)..."
   export USER_CREDENTIAL=\$(/fiware/scripts/get_credential.sh http://keycloak-consumer.\${INTERNAL_IP}.nip.io user-credential 2>/dev/null)
-  echo " > Credential: \${USER_CREDENTIAL:0:50}..."
-
-  echo "Fetching User Credential (Provider)..."
+  echo " > Credential Consumer: \${USER_CREDENTIAL:0:30}..."
   export USER_CREDENTIAL_PROVIDER=\$(/fiware/scripts/get_credential.sh http://keycloak-provider.\${INTERNAL_IP}.nip.io user-credential 2>/dev/null)
-  echo " > Credential: \${USER_CREDENTIAL_PROVIDER:0:50}..."
-  
-  if [ -n "\$USER_CREDENTIAL" ]; then
-      echo "Fetching Access Token (Consumer)..."
-      export ACCESS_TOKEN=\$(/fiware/scripts/get_access_token_oid4vp.sh http://mp-data-service.\${INTERNAL_IP}.nip.io "\$USER_CREDENTIAL" default 2>/dev/null)
-      echo " > Access Token: \${ACCESS_TOKEN:0:50}..."
-  else
-      echo " [!] SKIP Consumer Token (No Credential)"
-  fi
-  
-  if [ -n "\$USER_CREDENTIAL_PROVIDER" ]; then
-      echo "Fetching Access Token (Provider)..."
-      export PROVIDER_ACCESS_TOKEN=\$(/fiware/scripts/get_access_token_oid4vp.sh http://mp-data-service.\${INTERNAL_IP}.nip.io "\$USER_CREDENTIAL_PROVIDER" default 2>/dev/null)
-      echo " > Provider Token: \${PROVIDER_ACCESS_TOKEN:0:50}..."
-  else
-      echo " [!] SKIP Provider Token (No Credential)"
-  fi
+  echo " > Credential Provider: \${USER_CREDENTIAL_PROVIDER:0:30}..."
+  export ACCESS_TOKEN=\$(/fiware/scripts/get_access_token_oid4vp.sh http://mp-data-service.\${INTERNAL_IP}.nip.io "\$USER_CREDENTIAL" default 2>/dev/null)
+  echo " > Token Consumer: \${ACCESS_TOKEN:0:30}..."
+  export PROVIDER_ACCESS_TOKEN=\$(/fiware/scripts/get_access_token_oid4vp.sh http://mp-data-service.\${INTERNAL_IP}.nip.io "\$USER_CREDENTIAL_PROVIDER" default 2>/dev/null)
+  echo " > Token Provider: \${PROVIDER_ACCESS_TOKEN:0:30}..."
   echo "--- DONE ---"
 }
 EOF
@@ -258,7 +222,8 @@ wget -qO /fiware/trust-anchor/values.yaml-template https://raw.githubusercontent
 sed "s|INTERNAL_IP|$INTERNAL_IP|g" /fiware/trust-anchor/values.yaml-template > /fiware/trust-anchor/values.yaml
 helm upgrade --install trust-anchor data-space-connector/trust-anchor --version 0.2.1 -f /fiware/trust-anchor/values.yaml -n trust-anchor
 
-wait_for_ready "trust-anchor" 600
+# WAIT for strict rollout
+wait_for_rollout "trust-anchor" "trust-anchor-tir" 
 wait_for_api "http://til.${INTERNAL_IP}.nip.io/v4/issuers"
 
 # ==============================================================================
@@ -281,14 +246,17 @@ wget -qO /fiware/consumer/values.yaml-template https://raw.githubusercontent.com
 sed -e "s|DID_CONSUMER|$CONSUMER_DID|g" -e "s|INTERNAL_IP|$INTERNAL_IP|g" /fiware/consumer/values.yaml-template > /fiware/consumer/values.yaml
 helm upgrade --install consumer-dsc data-space-connector/data-space-connector --version 8.2.22 -f /fiware/consumer/values.yaml -n consumer
 
-wait_for_ready "consumer" 600
+# WAIT for strict rollout
+# Note: Deployment name depends on chart, usually "consumer-dsc-data-space-connector" or similar.
+# We'll check the main one.
+wait_for_rollout "consumer" "consumer-dsc-data-space-connector"
 wait_for_api "http://keycloak-consumer.${INTERNAL_IP}.nip.io/realms/master"
 register_did "http://til.${INTERNAL_IP}.nip.io/issuer" "$CONSUMER_DID" "[]"
 
 # ==============================================================================
 # 7. PROVIDER & APISIX
 # ==============================================================================
-echo -e "${BLUE}--- STEP 5: PROVIDER & ROUTE LOADING ---${NC}"
+echo -e "${BLUE}--- STEP 5: PROVIDER CORE (DSC) ---${NC}"
 setup_ns "provider"
 
 mkdir -p /fiware/provider-identity && cd /fiware/provider-identity
@@ -305,11 +273,19 @@ wget -qO /fiware/provider/values.yaml-template https://raw.githubusercontent.com
 sed -e "s|DID_PROVIDER|$PROVIDER_DID|g" -e "s|DID_CONSUMER|$CONSUMER_DID|g" -e "s|INTERNAL_IP|$INTERNAL_IP|g" /fiware/provider/values.yaml-template > /fiware/provider/values.yaml
 helm upgrade --install provider-dsc data-space-connector/data-space-connector --version 8.2.22 -f /fiware/provider/values.yaml -n provider
 
-# APISIX SETUP
-log_info "Deploying APISIX Configs..."
+# --- CRITICAL FIX: WAIT FOR PROVIDER *BEFORE* INSTALLING APISIX ---
+echo -e "${BLUE}[WAIT] Waiting for Provider DSC & Keycloak to be stable...${NC}"
+wait_for_rollout "provider" "provider-dsc-data-space-connector"
+wait_for_rollout "provider" "provider-dsc-keycloak"
+# Check DB explicitly too just in case
+wait_for_rollout "provider" "provider-dsc-postgresql"
+
+# ==============================================================================
+# 7B. APISIX GATEWAY
+# ==============================================================================
+echo -e "${BLUE}--- STEP 5B: APISIX GATEWAY ---${NC}"
 mkdir -p /fiware/apisix && cd /fiware/apisix
 wget -qO apisix-values.yaml-template https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/apisix/apisix-values.yaml-template
-# Dashboard Template is ignored, we generate it locally below to avoid map/string errors
 wget -qO apisix-secret.yaml https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/apisix/apisix-secret.yaml
 wget -qO apisix-routes-job.yaml-template https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/apisix/apisix-routes-job.yaml-template
 wget -qO opa-configmaps.yaml https://raw.githubusercontent.com/MarkKlerkx/DataspaceFontys/refs/heads/main/kubernetes/fiware/apisix/opa-configmaps.yaml
@@ -317,8 +293,7 @@ wget -qO opa-configmaps.yaml https://raw.githubusercontent.com/MarkKlerkx/Datasp
 sed "s|INTERNAL_IP|$INTERNAL_IP|g" apisix-values.yaml-template > apisix-values.yaml
 sed "s|INTERNAL_IP|$INTERNAL_IP|g" apisix-routes-job.yaml-template > apisix-routes-job.yaml
 
-# --- FIX: GENERATE DASHBOARD YAML (SIMPLIFIED FOR DEPRECATED CHART) ---
-# We use simple string paths because the chart crashes on object maps
+# FIX: Manually create simple Dashboard YAML to avoid 'map' errors
 cat <<EOF > apisix-dashboard.yaml
 image:
   repository: apache/apisix-dashboard
@@ -340,42 +315,30 @@ kubectl apply -f apisix-secret.yaml -n provider
 
 helm repo add apisix https://charts.apiseven.com ; helm repo update
 helm upgrade --install apisix apisix/apisix -f apisix-values.yaml -n provider
+helm upgrade --install apisix-dashboard apisix/apisix-dashboard -f apisix-dashboard.yaml -n provider
 
-# Install Dashboard with the locally generated CLEAN yaml file
-helm upgrade --install apisix-dashboard apisix/apisix-dashboard \
-  -f apisix-dashboard.yaml \
-  -n provider
+# WAIT for APISIX deployment
+wait_for_rollout "provider" "apisix"
 
-# CRITICAL WAIT: Wait for Provider Pods
-wait_for_ready "provider" 1200
-
-# --- FIX: CHECK APISIX ADMIN API AVAILABILITY BEFORE JOB ---
-echo -e "${BLUE}[WAIT] Waiting for APISIX Admin API to respond...${NC}"
+# --- CHECK ADMIN API BEFORE ROUTE JOB ---
+echo -e "${BLUE}[WAIT] Waiting for APISIX Admin API response...${NC}"
 for i in {1..30}; do
     kubectl port-forward -n provider svc/apisix-admin 9180:9180 > /dev/null 2>&1 &
-    PF_PID=$!
-    sleep 2
-    # Check for 401 Unauthorized (Good) or 200 (Good). 000 is Bad.
+    PF_PID=$! ; sleep 2
     STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 1 "http://localhost:9180/apisix/admin/routes" -H "X-API-KEY: edd1c9f034335f136f87ad84b625c8f1")
     kill $PF_PID >/dev/null 2>&1
-    
     if [[ "$STATUS" != "000" ]]; then
-       echo -e " ${GREEN}[OK] APISIX Admin Alive ($STATUS)${NC}"
-       break
+       echo -e " ${GREEN}[OK] APISIX Admin Alive ($STATUS)${NC}" ; break
     fi
-    echo -n "."
-    sleep 5
+    echo -n "." ; sleep 5
 done
 
-log_info "Ensuring APISIX Routes are loaded (Deleting old job)..."
-kubectl delete job apisix-route-importer -n provider --ignore-not-found
 log_info "Applying Route Job..."
+kubectl delete job apisix-route-importer -n provider --ignore-not-found
 kubectl apply -f apisix-routes-job.yaml -n provider
+kubectl wait --for=condition=complete job/apisix-route-importer -n provider --timeout=300s
 
-# Wait longer for job
-kubectl wait --for=condition=complete job/apisix-route-importer -n provider --timeout=300s || log_warn "Route job did not report complete immediately (check logs if tokens fail)."
-
-# Verify Trust APIs
+# Verify Endpoints
 wait_for_api "http://til-provider.${INTERNAL_IP}.nip.io/issuer"
 wait_for_api "http://keycloak-provider.${INTERNAL_IP}.nip.io/realms/master"
 
@@ -445,7 +408,6 @@ echo "Password:        admin"
 echo -e "\n${BLUE}--- 4. NEXT STEPS & HANDY COMMANDS ---${NC}"
 echo "To check tokens and debug, run:"
 echo -e "  ${GREEN}refresh_demo_tokens${NC}"
-echo "(This will now show the actual token values)"
 echo ""
 echo "Logging saved to $LOG_FILE"
 echo -e "${GREEN}================================================================${NC}"
