@@ -5,7 +5,7 @@
 # ==========================================
 DOMAIN_NAME="mp-operations.org"        # <--- CHANGE DOMAIN HERE
 IDENTITY_DIR="/fiware/provider-identity"
-YAML_FILE="provider.yaml"              # Path to your provider.yaml
+YAML_FILE="/fiware/provider/provider.yaml"              # Path to your provider.yaml
 TOOL_URL="https://github.com/wistefan/did-helper/releases/download/0.1.1/did-helper"
 PASSWORD="test"                        # Keystore password
 
