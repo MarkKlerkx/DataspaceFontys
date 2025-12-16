@@ -504,8 +504,6 @@ marketplace:
           paths:
             - "/"
     additionalEnvVars:
-      - name: BAE_LP_SHOW_LOCAL_LOGIN
-        value: "true"
       - name: BAE_LP_SIOP_IS_REDIRECTION
         value: "true"
       - name: BAE_LP_PURCHASE_ENABLED
