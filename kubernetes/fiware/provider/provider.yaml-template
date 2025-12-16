@@ -1,3 +1,6 @@
+apisix:
+  enabled: false
+
 credentials-config-service:
   ingress:
     enabled: true
