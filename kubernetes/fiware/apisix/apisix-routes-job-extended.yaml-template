@@ -1,0 +1,271 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: apisix-routes-job
+  namespace: provider
+data:
+  init_routes.sh: |
+    #!/bin/sh
+    # Configuratie
+    ADMIN_URL="http://apisix-admin:9180/apisix/admin/routes"
+    ADMIN_KEY="iaB7npvHkpztst7qZ3Mt0JjECXgCcLFw"
+    
+    # Pas dit aan naar jouw IP
+    BASE_DOMAIN="INTERNAL_IP.nip.io"
+    
+    # Hosts constructie
+    HOST_DATA="mp-data-service.$BASE_DOMAIN"
+    HOST_CM="contract-management.$BASE_DOMAIN"
+    HOST_TMF="mp-tmf-api.$BASE_DOMAIN"
+    HOST_TPP="tpp-service.$BASE_DOMAIN"
+    HOST_TPP_DATA="tpp-data-service.$BASE_DOMAIN"
+    HOST_TPP_CAT="tpp-catalog-service.$BASE_DOMAIN"
+
+    echo "--- Configuring Routes for Domain: $BASE_DOMAIN ---"
+
+    put_route() {
+      ID=$1
+      JSON=$2
+      echo "Configuring Route $ID..."
+      curl -s -i -X PUT "$ADMIN_URL/$ID" \
+        -H "X-API-KEY: $ADMIN_KEY" \
+        -H "Content-Type: application/json" \
+        -d "$JSON"
+    }
+
+    # --- 1. OIDC Discovery Redirects (4x) ---
+    # Deze zorgen dat /.well-known verzoeken naar de juiste interne service map gaan
+
+    # 1a. Data Service Discovery
+    put_route "oidc-config-data" "$(cat <<EOF
+    {
+      "uri": "/.well-known/openid-configuration",
+      "host": "$HOST_DATA",
+      "plugins": {
+        "proxy-rewrite": { "uri": "/services/data-service/.well-known/openid-configuration" }
+      },
+      "upstream": { "type": "roundrobin", "nodes": { "verifier:3000": 1 } }
+    }
+    EOF
+    )"
+
+    # 1b. Contract Management Discovery
+    put_route "oidc-config-cm" "$(cat <<EOF
+    {
+      "uri": "/.well-known/openid-configuration",
+      "host": "$HOST_CM",
+      "plugins": {
+        "proxy-rewrite": { "uri": "/services/contract-management/.well-known/openid-configuration" }
+      },
+      "upstream": { "type": "roundrobin", "nodes": { "verifier:3000": 1 } }
+    }
+    EOF
+    )"
+
+    # 1c. TPP Service Discovery
+    put_route "oidc-config-tpp" "$(cat <<EOF
+    {
+      "uri": "/.well-known/openid-configuration",
+      "host": "$HOST_TPP",
+      "plugins": {
+        "proxy-rewrite": { "uri": "/services/tpp-service/.well-known/openid-configuration" }
+      },
+      "upstream": { "type": "roundrobin", "nodes": { "verifier:3000": 1 } }
+    }
+    EOF
+    )"
+
+    # 1d. TM Forum API Discovery
+    put_route "oidc-config-tmf" "$(cat <<EOF
+    {
+      "uri": "/.well-known/openid-configuration",
+      "host": "$HOST_TMF",
+      "plugins": {
+        "proxy-rewrite": { "uri": "/services/tmf-api/.well-known/openid-configuration" }
+      },
+      "upstream": { "type": "roundrobin", "nodes": { "verifier:3000": 1 } }
+    }
+    EOF
+    )"
+
+
+    # --- 2. Dataspace Configuration ---
+    
+    put_route "dataspace-config" "$(cat <<EOF
+    {
+      "uri": "/.well-known/data-space-configuration",
+      "plugins": {
+        "proxy-rewrite": { "uri": "/.well-known/data-space-configuration/data-space-configuration.json" },
+        "response-rewrite": { "headers": { "set": { "content-type": "application/json" } } }
+      },
+      "upstream": { "type": "roundrobin", "nodes": { "dsconfig:3002": 1 } }
+    }
+    EOF
+    )"
+
+
+    # --- 3. Main Services (Protected with OPA & OIDC) ---
+
+    # 3a. Main Data Service (Scorpio)
+    put_route "main-data-service" "$(cat <<EOF
+    {
+      "uri": "/*",
+      "host": "$HOST_DATA",
+      "priority": 0,
+      "plugins": {
+        "openid-connect": {
+          "bearer_only": true,
+          "client_id": "data-service",
+          "client_secret": "unused",
+          "discovery": "https://verifier.mp-operations.org/services/data-service/.well-known/openid-configuration",
+          "ssl_verify": false,
+          "use_jwks": true
+        },
+        "opa": {
+          "host": "http://127.0.0.1:8181",
+          "policy": "policy/main",
+          "with_body": true
+        }
+      },
+      "upstream": { "type": "roundrobin", "nodes": { "data-service-scorpio:9090": 1 } }
+    }
+    EOF
+    )"
+
+    # 3b. TPP Data Service Access (Scorpio via TPP Policy)
+    put_route "tpp-data-service" "$(cat <<EOF
+    {
+      "uri": "/*",
+      "host": "$HOST_TPP_DATA",
+      "priority": 0,
+      "plugins": {
+        "openid-connect": {
+          "bearer_only": true,
+          "client_id": "contract-management",
+          "client_secret": "unused",
+          "discovery": "https://verifier.mp-operations.org/services/tmf-api/.well-known/openid-configuration",
+          "ssl_verify": false,
+          "use_jwks": true
+        },
+        "opa": {
+          "host": "http://127.0.0.1:8181",
+          "policy": "tpp",
+          "with_body": true
+        }
+      },
+      "upstream": { "type": "roundrobin", "nodes": { "data-service-scorpio:9090": 1 } }
+    }
+    EOF
+    )"
+
+    # 3c. TM Forum API (The Marketplace Backend)
+    put_route "tmf-api" "$(cat <<EOF
+    {
+      "uri": "/*",
+      "host": "$HOST_TMF",
+      "priority": 0,
+      "plugins": {
+        "openid-connect": {
+          "bearer_only": true,
+          "client_id": "contract-management",
+          "client_secret": "unused",
+          "discovery": "https://verifier.mp-operations.org/services/tmf-api/.well-known/openid-configuration",
+          "ssl_verify": false,
+          "use_jwks": true
+        },
+        "opa": {
+          "host": "http://127.0.0.1:8181",
+          "policy": "policy/main",
+          "with_body": true
+        }
+      },
+      "upstream": { "type": "roundrobin", "nodes": { "tm-forum-api:8080": 1 } }
+    }
+    EOF
+    )"
+
+    # 3d. Contract Management (Notification Receiver)
+    put_route "contract-management" "$(cat <<EOF
+    {
+      "uri": "/*",
+      "host": "$HOST_CM",
+      "priority": 0,
+      "plugins": {
+        "openid-connect": {
+          "bearer_only": true,
+          "client_id": "contract-management",
+          "client_secret": "unused",
+          "discovery": "https://verifier.mp-operations.org/services/contract-management/.well-known/openid-configuration",
+          "ssl_verify": false,
+          "use_jwks": true
+        },
+        "opa": {
+          "host": "http://127.0.0.1:8181",
+          "policy": "policy/main",
+          "with_body": true
+        }
+      },
+      "upstream": { "type": "roundrobin", "nodes": { "contract-management:8080": 1 } }
+    }
+    EOF
+    )"
+
+    # 3e. TPP Service (Rainbow)
+    put_route "tpp-service" "$(cat <<EOF
+    {
+      "uri": "/*",
+      "host": "$HOST_TPP",
+      "priority": 0,
+      "plugins": {
+        "openid-connect": {
+          "bearer_only": true,
+          "client_id": "data-service",
+          "client_secret": "unused",
+          "discovery": "https://verifier.mp-operations.org/services/data-service/.well-known/openid-configuration",
+          "ssl_verify": false,
+          "use_jwks": true
+        },
+        "opa": {
+          "host": "http://127.0.0.1:8181",
+          "policy": "policy/main",
+          "with_body": true
+        }
+      },
+      "upstream": { "type": "roundrobin", "nodes": { "rainbow:8080": 1 } }
+    }
+    EOF
+    )"
+
+    # 3f. TPP Catalog (Direct Rainbow Access)
+    put_route "tpp-catalog" "$(cat <<EOF
+    {
+      "uri": "/api/v1/catalogs",
+      "host": "$HOST_TPP_CAT",
+      "priority": 1,
+      "upstream": { "type": "roundrobin", "nodes": { "rainbow:8080": 1 } }
+    }
+    EOF
+    )"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: apisix-route-importer
+  namespace: provider
+spec:
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: Never
+      volumes:
+        - name: script-volume
+          configMap:
+            name: apisix-routes-job
+            defaultMode: 0755
+      containers:
+      - name: init-routes
+        image: quay.io/curl/curl:8.4.0
+        command: ["/bin/sh", "/scripts/init_routes.sh"]
+        volumeMounts:
+          - name: script-volume
+            mountPath: /scripts
