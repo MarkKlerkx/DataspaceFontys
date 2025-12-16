@@ -2,7 +2,7 @@ credentials-config-service:
   ingress:
     enabled: true
     hosts:
-      - host: provider-ccs.192.168.165.211.nip.io
+      - host: provider-ccs.INTERNAL_IP.nip.io
         paths:
           - "/"
   additionalEnvVars:
@@ -19,7 +19,7 @@ credentials-config-service:
             credentials:
               - type: LegalPersonCredential
                 trustedParticipantsLists:
-                  - http://tir.192.168.165.211.nip.io
+                  - http://tir.INTERNAL_IP.nip.io
                 trustedIssuersLists:
                   - http://trusted-issuers-list:8080
                 jwtInclusion:
@@ -48,7 +48,7 @@ credentials-config-service:
             credentials:
               - type: UserCredential
                 trustedParticipantsLists:
-                  - http://tir.192.168.165.211.nip.io
+                  - http://tir.INTERNAL_IP.nip.io
                 trustedIssuersLists:
                   - http://trusted-issuers-list:8080
                 jwtInclusion:
@@ -66,7 +66,7 @@ credentials-config-service:
             credentials:
               - type: LegalPersonCredential
                 trustedParticipantsLists:
-                  - http://tir.192.168.165.211.nip.io
+                  - http://tir.INTERNAL_IP.nip.io
                 trustedIssuersLists:
                   - http://trusted-issuers-list:8080
                 jwtInclusion:
@@ -91,7 +91,7 @@ credentials-config-service:
             credentials:
               - type: OperatorCredential
                 trustedParticipantsLists:
-                  - http://tir.192.168.165.211.nip.io
+                  - http://tir.INTERNAL_IP.nip.io
                 trustedIssuersLists:
                   - http://trusted-issuers-list:8080
                 jwtInclusion:
@@ -113,7 +113,7 @@ credentials-config-service:
             credentials:
               - type: OperatorCredential
                 trustedParticipantsLists:
-                  - http://tir.192.168.165.211.nip.io
+                  - http://tir.INTERNAL_IP.nip.io
                 trustedIssuersLists:
                   - http://trusted-issuers-list:8080
                 jwtInclusion:
@@ -127,7 +127,7 @@ credentials-config-service:
             credentials:
               - type: MarketplaceCredential
                 trustedParticipantsLists:
-                  - http://tir.192.168.165.211.nip.io
+                  - http://tir.INTERNAL_IP.nip.io
                 trustedIssuersLists:
                   - "*"
                 jwtInclusion:
@@ -159,7 +159,7 @@ vcverifier:
     logging:
       level: DEBUG
     verifier:
-      tirAddress: http://tir.192.168.165.211.nip.io/
+      tirAddress: http://tir.INTERNAL_IP.nip.io/
       did: did:web:mp-operations.org
       supportedModes: ["byValue", "byReference"]
       clientIdentification:
@@ -262,9 +262,9 @@ didJson:
     kty: EC
     # while this in productive environments should be an https endpoint, limitations of the gx-registry service require http in order to work around proxy issues in the local env. 
     x5u: http://mp-operations.org/.well-known/tls.crt
-    xCoord: "ZblK328akoT_mIthXUD2JUOYkncVj18kEHrD_08NI58"
+    xCoord: "PLACEHOLDER_X_COORD"
     # do not rename to `y`, since yaml interprest `y` as bool true.
-    yCoord: "zT9o1hFUgAS3Ck9sQAXAE8hdwAOzR9fzH9kfTDQW1lo"
+    yCoord: "PLACEHOLDER_Y_COORD"
     crv: "P-256"
   ingress:
     enabled: true
@@ -291,7 +291,7 @@ scorpio:
     enabled: true
     # only to make it available for the test initialization
     hosts:
-      - host: scorpio-provider.192.168.165.211.nip.io
+      - host: scorpio-provider.INTERNAL_IP.nip.io
         paths:
           - "/"
 odrl-pap:
@@ -301,7 +301,7 @@ odrl-pap:
   ingress:
     enabled: true
     hosts:
-      - host: pap-provider.192.168.165.211.nip.io
+      - host: pap-provider.INTERNAL_IP.nip.io
         paths:
           - "/"
 tm-forum-api:
@@ -310,7 +310,7 @@ tm-forum-api:
   ingress:
     enabled: true
     hosts:
-      - host: tm-forum-api.192.168.165.211.nip.io
+      - host: tm-forum-api.INTERNAL_IP.nip.io
         paths:
           - /
 # -- integration of rainbow
@@ -324,13 +324,13 @@ rainbow:
   ingress:
     enabled: true
     hosts:
-      - host: rainbow-provider.192.168.165.211.nip.io
+      - host: rainbow-provider.INTERNAL_IP.nip.io
         paths:
           - /
 tpp:
   enabled: true
   transfers:
-    host: http://rainbow-provider.192.168.165.211.nip.io:8080
+    host: http://rainbow-provider.INTERNAL_IP.nip.io:8080
     path: transfers
 contract-management:
   did: did:web:mp-operations.org
@@ -377,13 +377,11 @@ trusted-issuers-list:
     til:
       enabled: true
       hosts:
-        - host: til-provider.192.168.165.211.nip.io
+        - host: til-provider.INTERNAL_IP.nip.io
           paths:
             - /
-
 mongo-operator:
-  enabled: true
-
+  enabled: false
 managedMongo:
   enabled: true
   spec:
@@ -391,6 +389,10 @@ managedMongo:
       spec:
         template:
           spec:
+            #  Hostpath volumes are owned by root
+            #  but MongoDB containers run as non root
+            #  so we use an init container to change the owner of
+            #  the directory (init containers run as root)
             initContainers:
               - command:
                   - chown
@@ -425,7 +427,6 @@ managedMongo:
               resources:
                 requests:
                   storage: "1Gi"
-
 marketplace:
   enabled: true
   siop:
@@ -438,7 +439,7 @@ marketplace:
       - REPRESENTATIVE
       - READER
       - OPERATOR
-  externalUrl: https://marketplace.192.168.165.211.nip.io
+  externalUrl: https://marketplace.INTERNAL_IP.nip.io
   bizEcosystemChargingBackend:
     deployment:
       image:
@@ -497,7 +498,7 @@ marketplace:
       annotations:
         traefik.ingress.kubernetes.io/router.tls: "true"
       hosts:
-        - host: marketplace.192.168.165.211.nip.io
+        - host: marketplace.INTERNAL_IP.nip.io
           paths:
             - "/"
     additionalEnvVars:
@@ -519,7 +520,7 @@ marketplace:
 keycloak:
   ingress:
     enabled: true
-    hostname: keycloak-provider.192.168.165.211.nip.io
+    hostname: keycloak-provider.INTERNAL_IP.nip.io
     annotations:
       traefik.ingress.kubernetes.io/router.tls: "true"
   extraVolumeMounts:
@@ -543,7 +544,7 @@ keycloak:
     did: did:web:mp-operations.org
     keyAlgorithm: ES256
   realm:
-    frontendUrl: https://keycloak-provider.192.168.165.211.nip.io
+    frontendUrl: https://keycloak-provider.INTERNAL_IP.nip.io
     import: true
     name: test-realm
     attributes: |
@@ -941,4 +942,3 @@ registration:
   credentialTypes:
     - LegalPersonCredential
   prepScript: export $(curl -f -X GET did-helper:3002/did-material/did.env)
-Content here
