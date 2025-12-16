@@ -238,7 +238,8 @@ mysql:
       enabled: false
   secondary:
     persistence:
-      enabled: false
+      enabled: true
+      storageClass: local-path
 postgis:
   primary:
     resourcesPreset: none
@@ -246,7 +247,8 @@ postgis:
       enabled: false
   readReplicas:
     persistence:
-      enabled: false
+      enabled: true
+      storageClass: local-path
 postgresql:
   primary:
     resourcesPreset: none
@@ -254,7 +256,8 @@ postgresql:
       enabled: false
   readReplicas:
     persistence:
-      enabled: false
+      enabled: true
+      storageClass: local-path
 did:
   enabled: false
 didJson:
