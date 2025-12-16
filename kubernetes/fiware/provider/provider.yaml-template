@@ -213,7 +213,7 @@ vcverifier:
           - -c
           - |
             #!/bin/sh
-            cp /etc/ssl/cert.pem /root-ca/cert.pdata.typeem
+            cp /etc/ssl/cert.pem /root-ca/cert.pem
             cat /root-ca/cacert.pem >> /root-ca/cert.pem
         volumeMounts:
           - name: root-ca
