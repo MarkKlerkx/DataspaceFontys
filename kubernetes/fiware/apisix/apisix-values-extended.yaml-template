@@ -1,1 +1,132 @@
-dsfd
+
+global:
+  imageRegistry: ""
+  security:
+    allowInsecureImages: true
+
+apisix:
+  enabled: true
+  image:
+    repository: apache/apisix
+    tag: 3.14.0-debian
+  deployment:
+    mode: traditional
+    replicas: 1
+  admin:
+    enabled: true
+    type: ClusterIP
+    allow:
+      ipList:
+        - 0.0.0.0/0
+    credentials:
+      secretName: apisix-admin-secret
+      secretAdminKey: "admin-key"
+      adminKey: "iaB7npvHkpztst7qZ3Mt0JjECXgCcLFw"
+  plugins:
+    - opa
+    - openid-connect
+    - proxy-rewrite
+    - response-rewrite
+    - limit-req
+    - limit-count
+    - cors
+    - key-auth
+    - basic-auth
+    - prometheus
+  enable_debug: true
+
+gateway:
+  type: ClusterIP
+  http:
+    enabled: true
+    port: 80
+
+ingress:
+  enabled: true
+  className: traefik
+  annotations:
+    kubernetes.io/ingress.class: traefik
+  hosts:
+    - host: mp-data-service.INTERNAL_IP.nip.io
+      paths:
+        - "/"
+    - host: mp-tmf-api.INTERNAL_IP.nip.io
+      paths:
+        - "/"
+    - host: tpp-data-service.INTERNAL_IP.nip.io
+      paths:
+        - "/"
+    - host: tpp-service.INTERNAL_IP.nip.io
+      paths:
+        - "/"
+    - host: contract-management.INTERNAL_IP.nip.io
+      paths:
+        - "/"
+
+
+# OPA Sidecar Configuratie
+extraContainers:
+  - name: opa
+    image: openpolicyagent/opa:1.2.0
+    imagePullPolicy: IfNotPresent
+    ports:
+      - name: http
+        containerPort: 8181
+        protocol: TCP
+    args:
+      - "run"
+      - "--ignore=.*"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "--config-file=/config/opa.yaml"
+      - "--log-level=debug"
+      - "/policies"
+    volumeMounts:
+      - name: opa-config
+        mountPath: /config
+        readOnly: true
+      - name: opa-policies
+        mountPath: /policies
+        readOnly: true
+
+extraVolumes:
+  - name: opa-config
+    configMap:
+      name: opa-config
+  - name: opa-policies
+    configMap:
+      name: tpp-policy
+etcd:
+  enabled: true
+  fullnameOverride: provider-dsc-etcd
+  replicaCount: 1
+  image:
+    registry: public.ecr.aws
+    repository: bitnami/etcd
+    tag: "3.5.12-debian-11-r0"
+    pullPolicy: IfNotPresent  
+  persistence:
+    enabled: true
+    size: 8Gi
+    storageClass: local-path
+  auth:
+    rbac:
+      create: false
+  volumePermissions:
+    enabled: true
+    image:
+      registry: public.ecr.aws
+      repository: bitnami/os-shell
+      tag: 12-debian-12-r26
+      pullPolicy: IfNotPresent
+  startupProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 60
+
+ingress-controller:
+  enabled: false
+dashboard:
+  enabled: false
