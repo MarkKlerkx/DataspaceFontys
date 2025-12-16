@@ -447,6 +447,7 @@ marketplace:
     extraEnvVars:
       - name: BAE_CB_CUSTOMER_BILL
         value: "http://provider-dsc-tm-forum-api-customer-bill-management:8080/tmf-api/customerBillManagement/v4"
+  
   bizEcosystemApis:
     tmForum:
       catalog:
