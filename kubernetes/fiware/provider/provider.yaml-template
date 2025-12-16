@@ -499,6 +499,10 @@ marketplace:
       enabled: true
       annotations:
         traefik.ingress.kubernetes.io/router.tls: "true"
+      tls:
+        - hosts:
+            - marketplace.192.168.165.216.nip.io
+          secretName: tls-secret
       hosts:
         - host: marketplace.INTERNAL_IP.nip.io
           paths:
