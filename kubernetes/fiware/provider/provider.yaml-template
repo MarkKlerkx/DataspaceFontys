@@ -235,26 +235,17 @@ mysql:
   resourcesPreset: none
   primary:
     persistence:
-      enabled: false
-  secondary:
-    persistence:
       enabled: true
       storageClass: local-path
 postgis:
   primary:
     resourcesPreset: none
     persistence:
-      enabled: false
-  readReplicas:
-    persistence:
       enabled: true
       storageClass: local-path
 postgresql:
   primary:
     resourcesPreset: none
-    persistence:
-      enabled: false
-  readReplicas:
     persistence:
       enabled: true
       storageClass: local-path
