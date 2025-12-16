@@ -1,1 +1,944 @@
+credentials-config-service:
+  ingress:
+    enabled: true
+    hosts:
+      - host: provider-ccs.192.168.165.211.nip.io
+        paths:
+          - "/"
+  additionalEnvVars:
+    - name: FLYWAY_DATASOURCES_DEFAULT_LOCATIONS
+      value: classpath:db/migration/common,classpath:db/migration/mysql
+  registration:
+    enabled: true
+    services:
+      - id: bae
+        defaultOidcScope: "openid learcredential"
+        authorizationType: "FRONTEND_V2"
+        oidcScopes:
+          "openid learcredential":
+            credentials:
+              - type: LegalPersonCredential
+                trustedParticipantsLists:
+                  - http://tir.192.168.165.211.nip.io
+                trustedIssuersLists:
+                  - http://trusted-issuers-list:8080
+                jwtInclusion:
+                  enabled: true
+                  fullInclusion: true
+            dcql:
+              credentials:
+                - id: legal-person-query
+                  format: "vc+sd-jwt"
+                  multiple: false
+                  claims:
+                    - id: name-claim
+                      path:
+                        - firstName
+                    - id: roles-claim
+                      path:
+                        - roles
+                  meta:
+                    vct_values:
+                      - LegalPersonCredential
+      - id: data-service
+        defaultOidcScope: "default"
+        authorizationType: "DEEPLINK"
+        oidcScopes:
+          "default":
+            credentials:
+              - type: UserCredential
+                trustedParticipantsLists:
+                  - http://tir.192.168.165.211.nip.io
+                trustedIssuersLists:
+                  - http://trusted-issuers-list:8080
+                jwtInclusion:
+                  enabled: true
+                  fullInclusion: true
+            dcql:
+              credentials:
+                - id: user-query
+                  format: "jwt_vc_json"
+                  multiple: true
+                  meta:
+                    type_values:
+                      - UserCredential
+          "legal":
+            credentials:
+              - type: LegalPersonCredential
+                trustedParticipantsLists:
+                  - http://tir.192.168.165.211.nip.io
+                trustedIssuersLists:
+                  - http://trusted-issuers-list:8080
+                jwtInclusion:
+                  enabled: true
+                  fullInclusion: true
+            dcql:
+              credentials:
+                - id: legal-person-query
+                  format: "vc+sd-jwt"
+                  multiple: false
+                  claims:
+                    - id: name-claim
+                      path:
+                        - firstName
+                    - id: roles-claim
+                      path:
+                        - roles
+                  meta:
+                    vct_values:
+                      - LegalPersonCredential
+          "operator":
+            credentials:
+              - type: OperatorCredential
+                trustedParticipantsLists:
+                  - http://tir.192.168.165.211.nip.io
+                trustedIssuersLists:
+                  - http://trusted-issuers-list:8080
+                jwtInclusion:
+                  enabled: true
+                  fullInclusion: true
+            dcql:
+              credentials:
+                - id: operator-query
+                  format: "jwt_vc_json"
+                  multiple: true
+                  meta:
+                    type_values:
+                      - OperatorCredential
+      - id: tpp-service
+        defaultOidcScope: "operator"
+        authorizationType: "DEEPLINK"
+        oidcScopes:
+          "operator":
+            credentials:
+              - type: OperatorCredential
+                trustedParticipantsLists:
+                  - http://tir.192.168.165.211.nip.io
+                trustedIssuersLists:
+                  - http://trusted-issuers-list:8080
+                jwtInclusion:
+                  enabled: true
+                  fullInclusion: true
+      - id: contract-management
+        defaultOidcScope: "external-marketplace"
+        authorizationType: "DEEPLINK"
+        oidcScopes:
+          "external-marketplace":
+            credentials:
+              - type: MarketplaceCredential
+                trustedParticipantsLists:
+                  - http://tir.192.168.165.211.nip.io
+                trustedIssuersLists:
+                  - "*"
+                jwtInclusion:
+                  enabled: true
+                  fullInclusion: true
+            dcql:
+              credentials:
+                - id: mc-query
+                  format: "jwt_vc_json"
+                  multiple: true
+                  meta:
+                    type_values:
+                      - MarketplaceCredential
+
+vcverifier:
+  ingress:
+    enabled: true
+    annotations:
+      traefik.ingress.kubernetes.io/router.tls: "true"
+    tls:
+      - hosts:
+          - verifier.mp-operations.org
+        secretName: tls-secret
+    hosts:
+      - host: verifier.mp-operations.org
+        paths:
+          - "/"
+  deployment:
+    logging:
+      level: DEBUG
+    verifier:
+      tirAddress: http://tir.192.168.165.211.nip.io/
+      did: did:web:mp-operations.org
+      supportedModes: ["byValue", "byReference"]
+      clientIdentification:
+        keyPath: /signing-key/client.key.pem
+        requestKeyAlgorithm: ES256
+        id: x509_san_dns:verifier.mp-operations.org
+        certificatePath: /certificate/client-chain-bundle.cert.pem
+    server:
+      host: https://verifier.mp-operations.org
+    configRepo:
+      configEndpoint: http://credentials-config-service:8080
+    additionalVolumes:
+      - name: signing-key
+        secret:
+          secretName: signing-key
+      - name: cert-chain
+        secret:
+          secretName: cert-chain
+      # add the self generated root ca to the system truststore
+      - name: root-ca
+        emptyDir: {}
+      - name: ca-to-add
+        secret:
+          secretName: root-ca
+    additionalVolumeMounts:
+      - name: signing-key
+        mountPath: /signing-key
+      - name: cert-chain
+        mountPath: /certificate
+      # add the self generated root ca to the system truststore
+      - name: root-ca
+        mountPath: /etc/ssl/cert.pem
+        subPath: cert.pem
+    additionalEnvVars:
+      - name: HTTPS_PROXY
+        value: "http://squid-proxy.infra.svc.cluster.local:8888"
+      - name: HTTP_PROXY
+        value: "http://squid-proxy.infra.svc.cluster.local:8888"
+      - name: NO_PROXY
+        value: "credentials-config-service,w3.org,trusted-issuers-list"
+    initContainers:
+      # add the self generated root ca to the system truststore
+      - name: add-root-ca
+        image: alpine:3.21.3
+        command:
+          - /bin/sh
+        args:
+          - -c
+          - |
+            #!/bin/sh
+            cp /etc/ssl/cert.pem /root-ca/cert.pdata.typeem
+            cat /root-ca/cacert.pem >> /root-ca/cert.pem
+        volumeMounts:
+          - name: root-ca
+            mountPath: /root-ca
+          - name: ca-to-add
+            mountPath: /root-ca/cacert.pem
+            subPath: cacert.pem
+      - name: register-at-tir
+        image: ubuntu
+        command:
+          - /bin/bash
+        args:
+          - -ec
+          - |
+            #!/bin/bash
+            apt-get -y update; apt-get -y install curl
+            curl -X 'POST' 'http://tir.trust-anchor.svc.cluster.local:8080/issuer' -H 'Content-Type: application/json' -d "{\"did\": \"did:web:mp-operations.org\", \"credentials\": []}"
+mysql:
+  resourcesPreset: none
+  primary:
+    persistence:
+      enabled: false
+  secondary:
+    persistence:
+      enabled: false
+postgis:
+  primary:
+    resourcesPreset: none
+    persistence:
+      enabled: false
+  readReplicas:
+    persistence:
+      enabled: false
+postgresql:
+  primary:
+    resourcesPreset: none
+    persistence:
+      enabled: false
+  readReplicas:
+    persistence:
+      enabled: false
+did:
+  enabled: false
+didJson:
+  enabled: true
+  port: 3000
+  did: did:web:mp-operations.org
+  key:
+    kty: EC
+    # while this in productive environments should be an https endpoint, limitations of the gx-registry service require http in order to work around proxy issues in the local env. 
+    x5u: http://mp-operations.org/.well-known/tls.crt
+    xCoord: "ZblK328akoT_mIthXUD2JUOYkncVj18kEHrD_08NI58"
+    # do not rename to `y`, since yaml interprest `y` as bool true.
+    yCoord: "zT9o1hFUgAS3Ck9sQAXAE8hdwAOzR9fzH9kfTDQW1lo"
+    crv: "P-256"
+  ingress:
+    enabled: true
+    annotations:
+      traefik.ingress.kubernetes.io/service.passhostheader: "true"
+      traefik.ingress.kubernetes.io/router.tls: "true"
+    host: mp-operations.org
+    tlsSecret: tls-secret
+ 
+dataSpaceConfig:
+  enabled: true
+  serviceType: ClusterIP
+  port: 3002
+  supportedModels:
+    - "https://raw.githubusercontent.com/smart-data-models/dataModel.Consumption/master/ConsumptionPoint/schema.json"
+    - "https://raw.githubusercontent.com/smart-data-models/dataModel.Consumption/master/ConsumptionCost/schema.json"
+  supportedProtocols:
+    - http
+    - https
+  authenticationProtocols:
+    - oid4vp
+scorpio:
+  ingress:
+    enabled: true
+    # only to make it available for the test initialization
+    hosts:
+      - host: scorpio-provider.192.168.165.211.nip.io
+        paths:
+          - "/"
+odrl-pap:
+  additionalEnvVars:
+    - name: GENERAL_ORGANIZATION_DID
+      value: did:web:mp-operations.org
+  ingress:
+    enabled: true
+    hosts:
+      - host: pap-provider.192.168.165.211.nip.io
+        paths:
+          - "/"
+tm-forum-api:
+  registration:
+    enabled: false
+  ingress:
+    enabled: true
+    hosts:
+      - host: tm-forum-api.192.168.165.211.nip.io
+        paths:
+          - /
+# -- integration of rainbow
+rainbow:
+  enabled: true
+  db:
+    url: postgresql
+    user: postgres
+    existingSecret: database-secret
+    passwordKey: postgres-admin-password
+  ingress:
+    enabled: true
+    hosts:
+      - host: rainbow-provider.192.168.165.211.nip.io
+        paths:
+          - /
+tpp:
+  enabled: true
+  transfers:
+    host: http://rainbow-provider.192.168.165.211.nip.io:8080
+    path: transfers
+contract-management:
+  did: did:web:mp-operations.org
+  enableCentralMarketplace: true
+  services:
+    ## Config for Trusted Issuers List
+    trusted-issuers-list:
+      ## URL of the Trusted Issuers List Service
+      url: http://trusted-issuers-list:8080
+    ## Config for the TM Forum Service hosting the APIs
+    product-order:
+      ## URL of the TM Forum Service hosting the Product Ordering API
+      url: http://provider-tm-forum-api-product-ordering-management:8080
+    party:
+      ## URL of the TM Forum Service hosting the Party API
+      url: http://provider-tm-forum-api-party-catalog:8080
+    product-catalog:
+      ## URL of the TM Forum Service hosting the Product Catalog API
+      url: http://provider-tm-forum-api-product-catalog:8080
+    service-catalog:
+      ## URL of the TM Forum Service hosting the Service Catalog API
+      url: http://provider-tm-forum-api-service-catalog:8080
+    tmforum-agreement-api:
+      ## URL of the TM Forum Service hosting the Agreement API
+      url: http://provider-tm-forum-api-agreement:8080
+    quote:
+      ## URL for TM Forum Service hosting the Quote API
+      url: http://provider-tm-forum-api-quote:8080
+    rainbow:
+      ## URL for the Rainbow service
+      url: http://rainbow:8080
+    odrl:
+      ## URL for the ODRL-PAP
+      url: http://odrl-pap:8080
+  notification:
+    enabled: true
+    host: contract-management
+  additionalEnvVars:
+    - name: LOGGER_LEVELS_ROOT
+      value: DEBUG
+trusted-issuers-list:
+  # only open for clean up in the tests
+  ingress:
+    til:
+      enabled: true
+      hosts:
+        - host: til-provider.192.168.165.211.nip.io
+          paths:
+            - /
+
+mongo-operator:
+  enabled: true
+
+managedMongo:
+  enabled: true
+  spec:
+    statefulSet:
+      spec:
+        template:
+          spec:
+            initContainers:
+              - command:
+                  - chown
+                  - -R
+                  - "2000"
+                  - /data
+                image: busybox
+                volumeMounts:
+                  - mountPath: /data
+                    name: data-volume
+                securityContext:
+                  runAsNonRoot: false
+                  runAsUser: 0
+                  runAsGroup: 0
+                name: change-dir-permissions
+        volumeClaimTemplates:
+          - metadata:
+              name: data-volume
+            spec:
+              accessModes:
+                - ReadWriteOnce
+              storageClassName: default
+              resources:
+                requests:
+                  storage: "1Gi"
+          - metadata:
+              name: logs-volume
+            spec:
+              accessModes:
+                - ReadWriteOnce
+              storageClassName: default
+              resources:
+                requests:
+                  storage: "1Gi"
+
+marketplace:
+  enabled: true
+  siop:
+    verifier:
+      host: https://verifier.mp-operations.org
+    allowedRoles:
+      - seller
+      - customer
+      - admin
+      - REPRESENTATIVE
+      - READER
+      - OPERATOR
+  externalUrl: https://marketplace.192.168.165.211.nip.io
+  bizEcosystemChargingBackend:
+    deployment:
+      image:
+        tag: 10.5.0
+    extraEnvVars:
+      - name: BAE_CB_CUSTOMER_BILL
+        value: "http://provider-tm-forum-api-customer-bill-management:8080/tmf-api/customerBillManagement/v4"
+  bizEcosystemApis:
+    tmForum:
+      catalog:
+        host: provider-tm-forum-api-product-catalog
+        port: 8080
+        path: /tmf-api/productCatalogManagement/v4
+      inventory:
+        host: provider-tm-forum-api-product-inventory
+        port: 8080
+        path: /tmf-api/productInventory/v4
+      ordering:
+        host: provider-tm-forum-api-product-ordering-management
+        port: 8080
+        path: /tmf-api/productOrderingManagement/v4
+      billing:
+        host: provider-tm-forum-api-account
+        port: 8080
+        path: /tmf-api/accountManagement/v4
+      usage:
+        host: provider-tm-forum-api-usage-management
+        port: 8080
+        path: /tmf-api/usageManagement/v4
+      party:
+        host: provider-tm-forum-api-party-catalog
+        port: 8080
+        path: /tmf-api/party/v4
+      customer:
+        host: provider-tm-forum-api-customer-management
+        port: 8080
+        path: /tmf-api/customerManagement/v4
+      resources:
+        host: provider-tm-forum-api-resource-catalog
+        port: 8080
+        path: /tmf-api/resourceCatalog/v4
+      services:
+        host: provider-tm-forum-api-service-catalog
+        port: 8080
+        path: /tmf-api/serviceCatalogManagement/v4
+      resourceInventory:
+        host: provider-tm-forum-api-resource-inventory
+        port: 8080
+        path: /tmf-api/resourceInventoryManagement/v4
+  bizEcosystemLogicProxy:
+    statefulset:
+      image:
+        tag: 10.5.0-PRE-1
+    ingress:
+      enabled: true
+      annotations:
+        traefik.ingress.kubernetes.io/router.tls: "true"
+      hosts:
+        - host: marketplace.192.168.165.211.nip.io
+          paths:
+            - "/"
+    additionalEnvVars:
+      - name: BAE_LP_SIOP_IS_REDIRECTION
+        value: "true"
+      - name: BAE_LP_PURCHASE_ENABLED
+        value: "true"
+      - name: NODE_TLS_REJECT_UNAUTHORIZED
+        value: "0"
+      - name: HTTPS_PROXY
+        value: "http://squid-proxy.infra.svc.cluster.local:8888"
+      - name: BAE_LP_SIOP_CLIENT_ID
+        value: did:web:mp-operations.org
+      - name: BAE_LP_SIOP_PRIVATE_KEY
+        valueFrom:
+          secretKeyRef:
+            name: signing-key-env
+            key: key
+keycloak:
+  ingress:
+    enabled: true
+    hostname: keycloak-provider.192.168.165.211.nip.io
+    annotations:
+      traefik.ingress.kubernetes.io/router.tls: "true"
+  extraVolumeMounts:
+    - name: realms
+      mountPath: /opt/bitnami/keycloak/data/import
+    - name: provider-key
+      mountPath: "/keys"
+  extraVolumes:
+    - name: realms
+      configMap:
+        name: test-realm-realm
+    - name: provider-key
+      configMap:
+        name: provider-keystore
+        defaultMode: 0755
+  signingKey:
+    storePath: /keys/cert.jks
+    storePassword: password
+    keyAlias: certificate
+    keyPassword: password
+    did: did:web:mp-operations.org
+    keyAlgorithm: ES256
+  realm:
+    frontendUrl: https://keycloak-provider.192.168.165.211.nip.io
+    import: true
+    name: test-realm
+    attributes: |
+      "vc.user-sd.credential_signing_alg_values_supported": "ES256",
+      "vc.user-sd.credential_build_config.signing_algorithm": "ES256",
+      "vc.user-sd.credential_build_config.token_jws_type": "vc+sd-jwt",
+      "vc.user-sd.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
+      "vc.user-sd.format": "vc+sd-jwt",
+      "vc.user-sd.scope": "LegalPersonCredential",
+      "vc.user-sd.vct": "LegalPersonCredential",
+      "vc.user-sd.credential_build_config.visible_claims": "roles,email",
+      "vc.user-sd.credential_build_config.decoys": "3",
+      "vc.user-credential.credential_signing_alg_values_supported": "ES256",
+      "vc.user-credential.credential_build_config.signing_algorithm": "ES256",
+      "vc.user-credential.credential_build_config.token_jws_type": "JWT",
+      "vc.user-credential.credential_build_config.proof_types_supported": "{\"jwt\":{\"proof_signing_alg_values_supported\":[\"ES256\"]}}",
+      "vc.user-credential.format": "jwt_vc",
+      "vc.user-credential.scope": "LegalPersonCredential",
+      "vc.user-credential.vct": "LegalPersonCredential",
+      "vc.verifiable-credential.format": "vc+sd-jwt",
+      "vc.verifiable-credential.scope": "VerifiableCredential",
+      "vc.verifiable-credential.vct": "VerifiableCredential",
+      "vc.operator-credential.format": "vc+sd-jwt",
+      "vc.operator-credential.scope": "OperatorCredential",
+      "vc.operator-credential.vct": "OperatorCredential"
+    clientRoles: |
+      "did:web:fancy-marketplace.biz": [
+        {
+          "name": "customer",
+          "description": "Is allowed to see offers etc.",
+          "clientRole": true
+        },
+        {
+          "name": "OPERATOR",
+          "description": "Is allowed to operate clusters.",
+          "clientRole": true
+        },
+        {
+          "name": "REPRESENTATIVE",
+          "description": "Is allowed to register.",
+          "clientRole": true
+        }],
+      "account": [
+        {
+          "name": "delete-account",
+          "description": "${role_delete-account}",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        },
+        {
+          "name": "view-consent",
+          "description": "${role_view-consent}",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        },
+        {
+          "name": "view-groups",
+          "description": "${role_view-groups}",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        },
+        {
+          "name": "manage-account",
+          "description": "${role_manage-account}",
+          "composite": true,
+          "composites": {
+            "client": {
+              "account": [
+                "manage-account-links"
+              ]
+            }
+          },
+          "clientRole": true,
+          "attributes": {}
+        },
+        {
+          "name": "view-profile",
+          "description": "${role_view-profile}",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        },
+        {
+          "name": "view-applications",
+          "description": "${role_view-applications}",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        },
+        {
+          "name": "manage-consent",
+          "description": "${role_manage-consent}",
+          "composite": true,
+          "composites": {
+            "client": {
+              "account": [
+                "view-consent"
+              ]
+            }
+          },
+          "clientRole": true,
+          "attributes": {}
+        },
+        {
+          "name": "manage-account-links",
+          "description": "${role_manage-account-links}",
+          "composite": false,
+          "clientRole": true,
+          "attributes": {}
+        }
+      ]
+    users: |
+      {
+        "username": "employee",
+        "enabled": true,
+        "email": "employee@provider.org",
+        "firstName": "Test",
+        "lastName": "User",
+        "credentials": [
+          {
+            "type": "password",
+            "value": "test"
+          }
+        ],
+        "clientRoles": {
+          "did:web:fancy-marketplace.biz": [
+            "seller",
+            "admin",
+            "REPRESENTATIVE"
+          ],
+          "account": [
+            "view-profile",
+            "manage-account"
+          ]
+        },
+        "groups": [
+            "/consumer"
+        ]
+      }
+    clientScopes: |
+      {
+        "name": "LegalPersonCredential",
+        "description": "OIDC4VC Scope, thahttps://github.com/wistefan/did-helpert adds all properties required for a user.",
+        "protocol": "openid-connect",
+        "attributes": {},
+        "protocolMappers": [
+          {
+            "name": "context-mapper",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-context-mapper",
+            "config": {
+              "context": "https://www.w3.org/2018/credentials/v1",
+              "supportedCredentialTypes": "VerifiableCredential,LegalPersonCredential,OperatorCredential"
+            }
+          },
+          {
+            "name": "email-mapper",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-user-attribute-mapper",
+            "config": {
+              "subjectProperty": "email",
+              "userAttribute": "email",
+              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential"
+            }
+          },
+          {
+            "name": "firstName-mapper",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-user-attribute-mapper",
+            "config": {
+              "subjectProperty": "firstName",
+              "userAttribute": "firstName",
+              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential"
+            }
+          },
+          {
+            "name": "lastName-mapper",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-user-attribute-mapper",
+            "config": {
+              "subjectProperty": "lastName",
+              "userAttribute": "lastName",
+              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential"
+            }
+          },
+          {
+            "name": "role-mapper",
+            "protocol": "oid4vc",
+            "protocolMapper": "oid4vc-target-role-mapper",
+            "config": {
+              "subjectProperty": "roles",
+              "clientId": "did:web:fancy-marketplace.biz",
+              "supportedCredentialTypes": "LegalPersonCredential,OperatorCredential"
+            }
+          }
+        ]
+      }
+    clients: |
+      {
+        "clientId": "did:web:fancy-marketplace.biz",
+        "enabled": true,
+        "description": "Client to connect test.org",
+        "surrogateAuthRequired": false,
+        "alwaysDisplayInConsole": false,
+        "clientAuthenticatorType": "client-secret",
+        "defaultRoles": [],
+        "redirectUris": [],   
+        "webOrigins": [],
+        "notBefore": 0,
+        "bearerOnly": false,
+        "consentRequired": false,
+        "standardFlowEnabled": true,
+        "implicitFlowEnabled": false,
+        "directAccessGrantsEnabled": false,
+        "serviceAccountsEnabled": false,
+        "publicClient": false,
+        "frontchannelLogout": false,
+        "protocol": "openid-connect",
+        "attributes": {
+          "client.secret.creation.time": "1675260539"
+        },
+        "protocolMappers": [
+        ],
+        "authenticationFlowBindingOverrides": {},
+        "fullScopeAllowed": true,
+        "nodeReRegistrationTimeout": -1,
+        "defaultClientScopes": [],
+        "optionalClientScopes": []
+      },
+      {
+        "clientId": "account",
+        "name": "${client_account}",
+        "rootUrl": "${authBaseUrl}",
+        "baseUrl": "/realms/test-realm/account/",
+        "surrogateAuthRequired": false,
+        "enabled": true,
+        "alwaysDisplayInConsole": false,
+        "clientAuthenticatorType": "client-secret",
+        "redirectUris": [
+          "/realms/test-realm/account/*"
+        ],
+        "webOrigins": [],
+        "notBefore": 0,
+        "bearerOnly": false,
+        "consentRequired": false,
+        "standardFlowEnabled": true,
+        "implicitFlowEnabled": false,
+        "directAccessGrantsEnabled": false,
+        "serviceAccountsEnabled": false,
+        "publicClient": true,
+        "frontchannelLogout": false,
+        "protocol": "openid-connect",
+        "attributes": {
+          "realm_client": "false",
+          "post.logout.redirect.uris": "+"
+        },
+        "authenticationFlowBindingOverrides": {},
+        "fullScopeAllowed": true,
+        "nodeReRegistrationTimeout": 0,
+        "defaultClientScopes": [
+          "web-origins",
+          "acr",
+          "roles",
+          "profile",
+          "basic",
+          "email"
+        ],
+        "optionalClientScopes": [
+          "address",
+          "phone",
+          "offline_access",
+          "organization",
+          "microprofile-jwt"
+        ]
+      },
+      {
+        "clientId": "account-console",
+        "name": "${client_account-console}",
+        "rootUrl": "${authBaseUrl}",
+        "baseUrl": "/realms/test-realm/account/",
+        "surrogateAuthRequired": false,
+        "enabled": true,
+        "alwaysDisplayInConsole": false,
+        "clientAuthenticatorType": "client-secret",
+        "redirectUris": [
+          "/realms/test-realm/account/*"
+        ],
+        "webOrigins": [],
+        "notBefore": 0,
+        "bearerOnly": false,
+        "consentRequired": false,
+        "standardFlowEnabled": true,
+        "implicitFlowEnabled": false,
+        "directAccessGrantsEnabled": true,
+        "serviceAccountsEnabled": false,
+        "publicClient": true,
+        "frontchannelLogout": false,
+        "protocol": "openid-connect",
+        "attributes": {
+          "realm_client": "false",
+          "post.logout.redirect.uris": "+",
+          "pkce.code.challenge.method": "S256"
+        },
+        "authenticationFlowBindingOverrides": {},
+        "fullScopeAllowed": true,
+        "nodeReRegistrationTimeout": 0,
+        "protocolMappers": [
+          {
+            "id": "706c5202-1b03-4fad-a5b8-484287e941f8",
+            "name": "audience resolve",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-audience-resolve-mapper",
+            "consentRequired": false,
+            "config": {}
+          }
+        ],
+        "defaultClientScopes": [
+          "web-origins",
+          "acr",
+          "roles",
+          "profile",
+          "basic",
+          "email"
+        ],
+        "optionalClientScopes": [
+          "address",
+          "phone",
+          "offline_access",
+          "organization",
+          "microprofile-jwt",
+          "LegalPersonCredential"
+        ]
+      },
+      {
+        "clientId": "admin-cli",
+        "name": "${client_admin-cli}",
+        "surrogateAuthRequired": false,
+        "enabled": true,
+        "alwaysDisplayInConsole": false,
+        "clientAuthenticatorType": "client-secret",
+        "redirectUris": [],
+        "webOrigins": [],
+        "notBefore": 0,
+        "bearerOnly": false,
+        "consentRequired": false,
+        "standardFlowEnabled": false,
+        "implicitFlowEnabled": false,
+        "directAccessGrantsEnabled": true,
+        "serviceAccountsEnabled": false,
+        "publicClient": true,
+        "frontchannelLogout": false,
+        "protocol": "openid-connect",
+        "attributes": {
+          "realm_client": "false",
+          "client.use.lightweight.access.token.enabled": "true"
+        },
+        "authenticationFlowBindingOverrides": {},
+        "fullScopeAllowed": true,
+        "nodeReRegistrationTimeout": 0,
+        "protocolMappers": [
+          {
+            "name": "audience resolve",
+            "protocol": "openid-connect",
+            "protocolMapper": "oidc-audience-resolve-mapper",
+            "consentRequired": false,
+            "config": {}
+          }
+        ],
+        "defaultClientScopes": [
+          "web-origins",
+          "acr",
+          "roles",
+          "profile",
+          "basic",
+          "email"
+        ],
+        "optionalClientScopes": [
+          "address",
+          "phone",
+          "offline_access",
+          "organization",
+          "microprofile-jwt",
+          "UserCredential"
+        ]
+      }
+
+registration:
+  enabled: true
+  configMap: provider-til-registration
+  til: http://trusted-issuers-list.provider.svc.cluster.local:8080
+  did: did:web:mp-operations.org
+  credentialTypes:
+    - LegalPersonCredential
+  prepScript: export $(curl -f -X GET did-helper:3002/did-material/did.env)
 Content here
