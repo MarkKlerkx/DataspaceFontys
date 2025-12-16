@@ -379,6 +379,7 @@ trusted-issuers-list:
             - /
 mongo-operator:
   enabled: false
+
 managedMongo:
   enabled: true
   spec:
@@ -411,7 +412,7 @@ managedMongo:
             spec:
               accessModes:
                 - ReadWriteOnce
-              storageClassName: default
+              storageClassName: local-path
               resources:
                 requests:
                   storage: "1Gi"
@@ -420,7 +421,7 @@ managedMongo:
             spec:
               accessModes:
                 - ReadWriteOnce
-              storageClassName: default
+              storageClassName: local-path
               resources:
                 requests:
                   storage: "1Gi"
