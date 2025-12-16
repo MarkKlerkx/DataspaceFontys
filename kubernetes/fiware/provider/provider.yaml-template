@@ -439,55 +439,57 @@ marketplace:
       - READER
       - OPERATOR
   externalUrl: https://marketplace.INTERNAL_IP.nip.io
+
   bizEcosystemChargingBackend:
     deployment:
       image:
         tag: 10.5.0
     extraEnvVars:
       - name: BAE_CB_CUSTOMER_BILL
-        value: "http://provider-tm-forum-api-customer-bill-management:8080/tmf-api/customerBillManagement/v4"
+        value: "http://provider-dsc-tm-forum-api-customer-bill-management:8080/tmf-api/customerBillManagement/v4"
   bizEcosystemApis:
     tmForum:
       catalog:
-        host: provider-tm-forum-api-product-catalog
+        host: provider-dsc-tm-forum-api-product-catalog
         port: 8080
         path: /tmf-api/productCatalogManagement/v4
       inventory:
-        host: provider-tm-forum-api-product-inventory
+        host: provider-dsc-tm-forum-api-product-inventory
         port: 8080
         path: /tmf-api/productInventory/v4
       ordering:
-        host: provider-tm-forum-api-product-ordering-management
+        host: provider-dsc-tm-forum-api-product-ordering-management
         port: 8080
         path: /tmf-api/productOrderingManagement/v4
       billing:
-        host: provider-tm-forum-api-account
+        host: provider-dsc-tm-forum-api-account
         port: 8080
         path: /tmf-api/accountManagement/v4
       usage:
-        host: provider-tm-forum-api-usage-management
+        host: provider-dsc-tm-forum-api-usage-management
         port: 8080
         path: /tmf-api/usageManagement/v4
       party:
-        host: provider-tm-forum-api-party-catalog
+        host: provider-dsc-tm-forum-api-party-catalog
         port: 8080
         path: /tmf-api/party/v4
       customer:
-        host: provider-tm-forum-api-customer-management
+        host: provider-dsc-tm-forum-api-customer-management
         port: 8080
         path: /tmf-api/customerManagement/v4
       resources:
-        host: provider-tm-forum-api-resource-catalog
+        host: provider-dsc-tm-forum-api-resource-catalog
         port: 8080
         path: /tmf-api/resourceCatalog/v4
       services:
-        host: provider-tm-forum-api-service-catalog
+        host: provider-dsc-tm-forum-api-service-catalog
         port: 8080
         path: /tmf-api/serviceCatalogManagement/v4
       resourceInventory:
-        host: provider-tm-forum-api-resource-inventory
+        host: provider-dsc-tm-forum-api-resource-inventory
         port: 8080
         path: /tmf-api/resourceInventoryManagement/v4
+
   bizEcosystemLogicProxy:
     statefulset:
       image:
