@@ -438,7 +438,7 @@ marketplace:
       - REPRESENTATIVE
       - READER
       - OPERATOR
-  externalUrl: https://marketplace.INTERNAL_IP.nip.io
+  externalUrl: http://marketplace.INTERNAL_IP.nip.io
 
   bizEcosystemChargingBackend:
     deployment:
@@ -498,11 +498,6 @@ marketplace:
     ingress:
       enabled: true
       annotations:
-        traefik.ingress.kubernetes.io/router.tls: "true"
-      tls:
-        - hosts:
-            - marketplace.192.168.165.216.nip.io
-          secretName: tls-secret
       hosts:
         - host: marketplace.INTERNAL_IP.nip.io
           paths:
