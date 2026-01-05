@@ -50,7 +50,6 @@ echo -e "\n[Stap 4] Inwisselen code voor Credential Access Token..."
 resp_cred_token=$(curl -s -k -X POST "$1/realms/test-realm/protocol/openid-connect/token" \
   --header 'Content-Type: application/x-www-form-urlencoded' \
   --data grant_type=urn:ietf:params:oauth:grant-type:pre-authorized_code \
-  --data client_id="did:key:zDnaeWfLgffWDkUxX4kzNSnSZSZSL8nbQ2ncepu4yzguX2e6n" \
   --data pre-authorized_code="${pre_authorized_code}")
 
 echo "Raw Response Stap 4: $resp_cred_token"
