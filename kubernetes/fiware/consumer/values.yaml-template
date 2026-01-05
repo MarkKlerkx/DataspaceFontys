@@ -89,7 +89,7 @@ keycloak:
   containerSecurityContext:
     enabled: false
   proxyHeaders: xforwarded
-  proxy: edge
+  proxy: none
   service:
     ports:
       http: 8080
@@ -125,6 +125,10 @@ keycloak:
     # password for reading the key store connected to the did
     - name: STORE_PASS
       value: test
+    - name: KC_HTTP_ENABLED
+      value: "true"
+    - name: KC_HOSTNAME_STRICT_HTTPS
+      value: "false" 
     - name: KEYCLOAK_HOSTNAME
       value: http://keycloak-consumer.INTERNAL_IP.nip.io
     # keycloak admin password
