@@ -236,6 +236,18 @@ keycloak:
     # did of the provider
     - name: DID
       value: DID_PROVIDER
+    # postgresql
+    - name: KC_DB
+      value: "postgres"
+    - name: KC_DB_URL  
+      value: "jdbc:postgresql://postgresql:5432/keycloak"
+    - name: KC_DB_USERNAME
+      value: "postgres"
+    - name: KC_DB_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: database-secret
+          key: postgres-admin-password
 
   extraVolumeMounts:
     - name: did-material
