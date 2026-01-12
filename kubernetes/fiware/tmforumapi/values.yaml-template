@@ -1,0 +1,29 @@
+# tm-forum-values.yaml
+replicaCount: 1
+
+image:
+  repository: fiware/tm-forum-api
+  tag: latest
+
+# Koppeling met de nieuwe MongoDB in de provider namespace
+mongodb:
+  host: mongodb-provider
+  port: 27017
+  database: tmforum
+
+ingress:
+  enabled: true
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    # Optioneel: voeg cert-manager annotaties toe als je die gebruikt
+  hosts:
+    - host: tm-forum-api.INTERNAL_IP.nip.io
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+
+# Voor persistente opslag van eventuele media/bijlagen
+persistence:
+  enabled: true
+  storageClass: "local-path"
+  size: 2Gi

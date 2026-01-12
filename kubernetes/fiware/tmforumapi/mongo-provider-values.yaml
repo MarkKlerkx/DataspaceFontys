@@ -1,0 +1,15 @@
+# mongo-provider-values.yaml
+architecture: standalone
+
+auth:
+  enabled: false
+
+persistence:
+  enabled: true
+  storageClass: "local-path"
+  size: 8Gi
+
+primary:
+  service:
+    ports:
+      mongodb: 27017
