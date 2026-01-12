@@ -9,6 +9,13 @@ mongodb:
   port: 27017
   database: tmforum
 
+contextBroker:
+  host: data-service-scorpio.provider.svc.cluster.local
+  port: 9090
+
+config:
+  contextBrokerUrl: "http://data-service-scorpio.provider.svc.cluster.local:9090"
+
 ingress:
   enabled: true
   annotations:
