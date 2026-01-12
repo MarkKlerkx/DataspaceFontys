@@ -1,6 +1,6 @@
 # -- issuance is not required in this example
 keycloak:
-  enabled: false
+  enabled: true
 
 ## AUTHENTICATION
 
