@@ -158,6 +158,14 @@ postgis:
 # the data service
 scorpio:
   enabled: true
+  ingress:
+    enabled: true
+    annotations:
+      kubernetes.io/ingress.class: traefik
+    hosts:
+      - host: scorpio-broker.INTERNAL_IP.nip.io
+        paths:
+          - "/"
 
 ## TMForum API
 
