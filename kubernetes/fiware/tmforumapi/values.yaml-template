@@ -10,11 +10,11 @@ mongodb:
   database: tmforum
 
 contextBroker:
-  host: data-service-scorpio.provider.svc.cluster.local
-  port: 9090
+  host: scorpio-broker.INTERNAL_IP.nip.io
+  port: 80
 
 config:
-  contextBrokerUrl: "http://data-service-scorpio.provider.svc.cluster.local:9090"
+  contextBrokerUrl: "http://scorpio-broker.INTERNAL_IP.nip.io"
 
 ingress:
   enabled: true
