@@ -192,6 +192,13 @@ scorpio:
           - "/"
 
 ## TMForum API
+contextBroker:
+  host: scorpio-broker.INTERNAL_IP.nip.io
+  port: 80
+
+config:
+  hostUrl: "http://tm-forum-api.provider.svc.cluster.local:8080"
+  contextBrokerUrl: "http://scorpio-broker.INTERNAL_IP.nip.io"
 
 # tmforum apis to support contracting
 tm-forum-api:
