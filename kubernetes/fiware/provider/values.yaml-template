@@ -114,16 +114,21 @@ postgresql:
       adminPasswordKey: postgres-admin-password
       userPasswordKey: postgres-user-password
   primary:
-    # -- scripts to be run on intialization
     initdb:
       scripts:
         create.sh: |
           psql postgresql://postgres:${POSTGRES_PASSWORD}@localhost:5432 -c "CREATE DATABASE keycloak;"
           psql postgresql://postgres:${POSTGRES_PASSWORD}@localhost:5432 -c "CREATE DATABASE pap;"
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"    
     persistence:
       enabled: true      
-      # use one of the classes provided by your cluster
       storageClass: local-path
+
 # policy administration point
 odrl-pap:
   additonalEnvVars:
@@ -150,9 +155,14 @@ odrl-pap:
 # database used for scorpio
 postgis:
   primary:
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"    
     persistence:
       enabled: true      
-      # use one of the classes provided by your cluster
       storageClass: local-path
 
 # the data service
