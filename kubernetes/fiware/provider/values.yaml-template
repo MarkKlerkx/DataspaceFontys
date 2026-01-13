@@ -168,6 +168,20 @@ postgis:
 # the data service
 scorpio:
   enabled: true
+  env:
+    QUARKUS_FLYWAY_ACTIVE: "true"
+    QUARKUS_FLYWAY_MIGRATE_AT_START: "true"
+    QUARKUS_PROFILE: "db"
+    dbhost: "data-service-postgis"
+    dbport: "5432"
+    dbname: "ngb"
+    dbuser: "ngb"
+    dbpass: 
+      valueFrom:
+        secretKeyRef:
+          name: data-service-secret
+          key: postgres-user-password
+    gateway: "http://data-service-scorpio:9090"
   ingress:
     enabled: true
     annotations:
