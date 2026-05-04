@@ -147,27 +147,34 @@ data:
       if headlamp_url:
         headlamp_block = f"""
         <div class="card card-headlamp">
-          <div class="card-title">Headlamp</div>
-          <div class="card-row"><a href="{headlamp_url}" target="_blank" rel="noreferrer">{headlamp_url}</a></div>
-          <div class="card-row">
-            <button id="btn-token">Get Headlamp token</button>
-            <button id="btn-copy" class="secondary" disabled>Copy</button>
-            <span id="token-status" class="muted"></span>
+          <div class="card-header">
+            <div class="card-title">Headlamp</div>
           </div>
+          <div class="card-body">
+            <div class="card-row"><a href="{headlamp_url}" target="_blank" rel="noreferrer">{headlamp_url}</a></div>
+            <div class="card-row">
+              <button id="btn-token">Get Headlamp token</button>
+              <span id="token-status" class="muted"></span>
+            </div>
           <pre id="token-out" class="token" style="display:none;"><code></code></pre>
+          </div>
         </div>
         """
 
       ca_block = f"""
         <div class="card card-tls">
-          <div class="card-title">TLS / Certificates</div>
-          <div class="card-row">
-            <a href="/dsconnector-ca.crt">Download dsconnector-ca.crt</a>
-            <span class="muted">{' (available)' if ca_ok else ' (not available yet: cert-manager/ca-secret missing?)'}</span>
+          <div class="card-header">
+            <div class="card-title">TLS / Certificates</div>
           </div>
-          <div class="card-row muted"><strong>Windows (Admin)</strong>: <code>certutil -addstore -f Root dsconnector-ca.crt</code></div>
-          <div class="card-row muted"><strong>Verify</strong>: <code>certutil -store Root | findstr /i "selfsigned-ca"</code></div>
-          <div class="card-row muted"><strong>Then</strong>: restart your browser.</div>
+          <div class="card-body">
+            <div class="card-row">
+              <a href="/dsconnector-ca.crt">Download dsconnector-ca.crt</a>
+              <span class="muted">{' (available)' if ca_ok else ' (not available yet: cert-manager/ca-secret missing?)'}</span>
+            </div>
+            <div class="card-row muted"><strong>Windows (Admin)</strong>: <code>certutil -addstore -f Root dsconnector-ca.crt</code></div>
+            <div class="card-row muted"><strong>Verify</strong>: <code>certutil -store Root | findstr /i "selfsigned-ca"</code></div>
+            <div class="card-row muted"><strong>Then</strong>: restart your browser.</div>
+          </div>
         </div>
       """
 
@@ -178,20 +185,41 @@ data:
       <meta name="viewport" content="width=device-width, initial-scale=1" />
       <title>DSC URL Portal</title>
       <style>
-        body {{ font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; background: #0b1220; color: #e5e7eb; }}
-        header {{ padding: 18px 20px; border-bottom: 1px solid rgba(255,255,255,0.08); background: #0b1220; position: sticky; top: 0; }}
+        body {{
+          font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+          margin: 0;
+          color: #e5e7eb;
+          background:
+            radial-gradient(1200px 600px at 10% -10%, rgba(59,130,246,0.25), transparent 60%),
+            radial-gradient(900px 500px at 90% 0%, rgba(16,185,129,0.20), transparent 55%),
+            #070b14;
+        }}
+        header {{ padding: 18px 20px; border-bottom: 1px solid rgba(255,255,255,0.10); background: rgba(7,11,20,0.75); backdrop-filter: blur(8px); position: sticky; top: 0; }}
         h1 {{ margin: 0; font-size: 16px; letter-spacing: 0.2px; }}
         .sub {{ margin-top: 6px; font-size: 12px; opacity: 0.75; }}
         main {{ padding: 16px 20px 28px; }}
         .container {{ max-width: 48rem; margin: 0 auto; }}
         .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; margin-bottom: 14px; }}
-        .card {{ background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px; }}
-        .card-title {{ font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.8; margin-bottom: 8px; }}
-        .card-row {{ margin-top: 6px; }}
-        .card-tls {{ border-color: rgba(16, 185, 129, 0.55); box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.10) inset; }}
-        .card-headlamp {{ border-color: rgba(59, 130, 246, 0.55); box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.10) inset; }}
+        .card {{
+          background: rgba(255,255,255,0.05);
+          border: 1px solid rgba(255,255,255,0.10);
+          border-radius: 14px;
+          overflow: hidden;
+          box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+        }}
+        .card-header {{
+          padding: 10px 12px;
+          border-bottom: 1px solid rgba(255,255,255,0.10);
+          background: linear-gradient(90deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03));
+        }}
+        .card-body {{ padding: 12px; }}
+        .card-title {{ font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.9; }}
+        .card-row {{ margin-top: 8px; }}
+        .card-tls {{ border-color: rgba(16, 185, 129, 0.55); }}
+        .card-tls .card-header {{ background: linear-gradient(90deg, rgba(16,185,129,0.22), rgba(255,255,255,0.03)); }}
+        .card-headlamp {{ border-color: rgba(59, 130, 246, 0.55); }}
+        .card-headlamp .card-header {{ background: linear-gradient(90deg, rgba(59,130,246,0.22), rgba(255,255,255,0.03)); }}
         button {{ background: #2563eb; color: #fff; border: 0; border-radius: 8px; padding: 8px 10px; cursor: pointer; font-weight: 600; }}
-        button.secondary {{ background: rgba(255,255,255,0.10); }}
         button:disabled {{ opacity: 0.5; cursor: default; }}
         table {{ width: 100%; table-layout: fixed; border-collapse: collapse; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; overflow: hidden; }}
         th, td {{ text-align: left; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); vertical-align: top; }}
@@ -236,14 +264,12 @@ data:
       </main>
       <script>
         const btn = document.getElementById('btn-token');
-        const copyBtn = document.getElementById('btn-copy');
         if (btn) {{
           const status = document.getElementById('token-status');
           const out = document.getElementById('token-out');
           const outCode = out.querySelector('code');
           btn.addEventListener('click', async () => {{
             btn.disabled = true;
-            if (copyBtn) copyBtn.disabled = true;
             status.textContent = ' fetching token...';
             try {{
               const resp = await fetch('/api/headlamp-token');
@@ -251,28 +277,10 @@ data:
               out.style.display = 'block';
               outCode.textContent = txt.trim();
               status.textContent = resp.ok ? ' ok' : ' failed';
-              if (copyBtn && resp.ok && txt.trim().length > 0) copyBtn.disabled = false;
             }} catch (e) {{
               status.textContent = ' failed';
             }} finally {{
               btn.disabled = false;
-            }}
-          }});
-        }}
-
-        if (copyBtn) {{
-          copyBtn.addEventListener('click', async () => {{
-            const out = document.getElementById('token-out');
-            const outCode = out ? out.querySelector('code') : null;
-            const token = outCode ? outCode.textContent : '';
-            if (!token) return;
-            try {{
-              await navigator.clipboard.writeText(token);
-              const status = document.getElementById('token-status');
-              if (status) status.textContent = ' copied';
-            }} catch (e) {{
-              const status = document.getElementById('token-status');
-              if (status) status.textContent = ' copy failed';
             }}
           }});
         }}
