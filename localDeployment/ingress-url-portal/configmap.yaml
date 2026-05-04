@@ -7,25 +7,39 @@ data:
   generate.py: |
     import json
     import os
-    import subprocess
     import base64
     from datetime import datetime, timezone
+    import ssl
+    import urllib.request
+    import urllib.error
 
     OUT_PATH = os.environ.get("OUT_PATH", "/www/index.html")
     CA_OUT = os.environ.get("CA_OUT", "/www/dsconnector-ca.crt")
 
-    def sh(cmd: list[str]) -> str:
-      return subprocess.check_output(cmd, text=True)
+    API_HOST = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
+    API_PORT = os.environ.get("KUBERNETES_SERVICE_PORT", "443")
+    API_BASE = f"https://{API_HOST}:{API_PORT}"
+    SA_TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+    SA_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 
-    def get_json(cmd: list[str]) -> dict:
-      return json.loads(sh(cmd))
+    def api_request(path: str) -> dict:
+      with open(SA_TOKEN_PATH, "r", encoding="utf-8") as f:
+        token = f.read().strip()
+      ctx = ssl.create_default_context(cafile=SA_CA_PATH)
+      req = urllib.request.Request(
+        API_BASE + path,
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+        method="GET",
+      )
+      with urllib.request.urlopen(req, context=ctx, timeout=10) as resp:
+        return json.loads(resp.read().decode("utf-8"))
 
     def get_ingresses() -> list[dict]:
-      data = get_json(["kubectl", "get", "ingress", "-A", "-o", "json"])
+      data = api_request("/apis/networking.k8s.io/v1/ingresses")
       return data.get("items", [])
 
     def get_nodes_internal_ip() -> str | None:
-      data = get_json(["kubectl", "get", "nodes", "-o", "json"])
+      data = api_request("/api/v1/nodes")
       for n in data.get("items", []):
         for addr in ((n.get("status") or {}).get("addresses") or []):
           if addr.get("type") == "InternalIP" and addr.get("address"):
@@ -34,7 +48,7 @@ data:
 
     def get_nodeport(ns: str, svc: str) -> int | None:
       try:
-        data = get_json(["kubectl", "-n", ns, "get", "svc", svc, "-o", "json"])
+        data = api_request(f"/api/v1/namespaces/{ns}/services/{svc}")
         ports = ((data.get("spec") or {}).get("ports") or [])
         if ports and ports[0].get("nodePort"):
           return int(ports[0]["nodePort"])
@@ -45,7 +59,7 @@ data:
     def refresh_ca_cert() -> bool:
       # Read cert-manager/ca-secret tls.crt and write it as dsconnector-ca.crt
       try:
-        data = get_json(["kubectl", "-n", "cert-manager", "get", "secret", "ca-secret", "-o", "json"])
+        data = api_request("/api/v1/namespaces/cert-manager/secrets/ca-secret")
         b64 = (((data.get("data") or {}).get("tls.crt")) or "")
         if not b64:
           return False
@@ -253,14 +267,23 @@ data:
 
   server.py: |
     import os
-    import subprocess
     import threading
     import time
+    import json
+    import ssl
+    import urllib.request
+    import urllib.error
     from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
     from urllib.parse import urlparse
 
     WWW_DIR = os.environ.get("WWW_DIR", "/www")
     OUT_PATH = os.environ.get("OUT_PATH", f"{WWW_DIR}/index.html")
+
+    API_HOST = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
+    API_PORT = os.environ.get("KUBERNETES_SERVICE_PORT", "443")
+    API_BASE = f"https://{API_HOST}:{API_PORT}"
+    SA_TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+    SA_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 
     def write_fallback_index(msg: str):
       os.makedirs(WWW_DIR, exist_ok=True)
@@ -291,19 +314,35 @@ data:
       with open(OUT_PATH, "w", encoding="utf-8") as f:
         f.write(html)
 
+    def api_post(path: str, payload: dict) -> tuple[int, str]:
+      with open(SA_TOKEN_PATH, "r", encoding="utf-8") as f:
+        token = f.read().strip()
+      ctx = ssl.create_default_context(cafile=SA_CA_PATH)
+      data = json.dumps(payload).encode("utf-8")
+      req = urllib.request.Request(
+        API_BASE + path,
+        data=data,
+        headers={
+          "Authorization": f"Bearer {token}",
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        method="POST",
+      )
+      try:
+        with urllib.request.urlopen(req, context=ctx, timeout=10) as resp:
+          return resp.getcode(), resp.read().decode("utf-8")
+      except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8")
+
     def run_generate_loop():
       while True:
         try:
-          p = subprocess.run(
-            ["python3", "/app/generate.py"],
-            env={**os.environ, "OUT_PATH": OUT_PATH},
-            text=True,
-            capture_output=True,
-          )
-          if p.returncode != 0:
-            msg = (p.stdout or "") + ("\n" if p.stdout and p.stderr else "") + (p.stderr or "")
-            msg = msg.strip() or f"generate.py failed with exit code {p.returncode}"
-            write_fallback_index(msg)
+          # run generate in-process so stacktraces show
+          import runpy
+          runpy.run_path("/app/generate.py", run_name="__main__")
+        except Exception as e:
+          write_fallback_index(str(e))
         time.sleep(10)
 
     class Handler(SimpleHTTPRequestHandler):
@@ -313,18 +352,22 @@ data:
       def do_GET(self):
         path = urlparse(self.path).path
         if path == "/api/headlamp-token":
-          self.send_response(200)
+          code, body = api_post(
+            "/api/v1/namespaces/kube-system/serviceaccounts/my-headlamp/token",
+            {"apiVersion": "authentication.k8s.io/v1", "kind": "TokenRequest"},
+          )
+          self.send_response(200 if code < 400 else code)
           self.send_header("Content-Type", "text/plain; charset=utf-8")
           self.end_headers()
           try:
-            token = subprocess.check_output(
-              ["kubectl", "-n", "kube-system", "create", "token", "my-headlamp"],
-              text=True,
-              stderr=subprocess.STDOUT,
-            )
-            self.wfile.write(token.encode("utf-8"))
-          except subprocess.CalledProcessError as e:
-            self.wfile.write((e.output or "failed\n").encode("utf-8"))
+            data = json.loads(body)
+            token = (((data.get("status") or {}).get("token")) or "").strip()
+            if token:
+              self.wfile.write((token + "\n").encode("utf-8"))
+            else:
+              self.wfile.write((body.strip() + "\n").encode("utf-8"))
+          except Exception:
+            self.wfile.write((body.strip() + "\n").encode("utf-8"))
           return
         return super().do_GET()
 

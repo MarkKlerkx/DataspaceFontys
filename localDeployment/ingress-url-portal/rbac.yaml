@@ -15,9 +15,6 @@ rules:
   - apiGroups: [""]
     resources: ["services", "nodes"]
     verbs: ["get", "list"]
-  - apiGroups: [""]
-    resources: ["serviceaccounts/token"]
-    verbs: ["create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -53,6 +50,32 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: ingress-url-portal-ca-secret-read
+subjects:
+  - kind: ServiceAccount
+    name: ingress-url-portal
+    namespace: kube-system
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ingress-url-portal-headlamp-token
+  namespace: kube-system
+rules:
+  - apiGroups: [""]
+    resources: ["serviceaccounts/token"]
+    resourceNames: ["my-headlamp"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ingress-url-portal-headlamp-token
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ingress-url-portal-headlamp-token
 subjects:
   - kind: ServiceAccount
     name: ingress-url-portal
