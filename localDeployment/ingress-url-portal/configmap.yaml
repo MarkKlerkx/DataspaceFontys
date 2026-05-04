@@ -219,26 +219,26 @@ data:
       </main>
       <script>
         const btn = document.getElementById('btn-token');
-        if (btn) {
+        if (btn) {{
           const status = document.getElementById('token-status');
           const out = document.getElementById('token-out');
           const outCode = out.querySelector('code');
-          btn.addEventListener('click', async () => {
+          btn.addEventListener('click', async () => {{
             btn.disabled = true;
             status.textContent = ' fetching token...';
-            try {
+            try {{
               const resp = await fetch('/api/headlamp-token');
               const txt = await resp.text();
               out.style.display = 'block';
               outCode.textContent = txt.trim();
               status.textContent = resp.ok ? ' ok' : ' failed';
-            } catch (e) {
+            }} catch (e) {{
               status.textContent = ' failed';
-            } finally {
+            }} finally {{
               btn.disabled = false;
-            }
-          });
-        }
+            }}
+          }});
+        }}
       </script>
     </body>
     </html>
@@ -294,9 +294,16 @@ data:
     def run_generate_loop():
       while True:
         try:
-          subprocess.check_call(["python3", "/app/generate.py"], env={**os.environ, "OUT_PATH": OUT_PATH})
-        except Exception:
-          write_fallback_index("generate.py failed (check RBAC, cert-manager/ca-secret, or kubectl access).")
+          p = subprocess.run(
+            ["python3", "/app/generate.py"],
+            env={**os.environ, "OUT_PATH": OUT_PATH},
+            text=True,
+            capture_output=True,
+          )
+          if p.returncode != 0:
+            msg = (p.stdout or "") + ("\n" if p.stdout and p.stderr else "") + (p.stderr or "")
+            msg = msg.strip() or f"generate.py failed with exit code {p.returncode}"
+            write_fallback_index(msg)
         time.sleep(10)
 
     class Handler(SimpleHTTPRequestHandler):
