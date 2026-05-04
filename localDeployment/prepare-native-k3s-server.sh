@@ -547,6 +547,94 @@ apply_manifests() {
   retry_apply_tree "$k3s_dir" 3
 }
 
+fix_marketplace_did_ingress_conflict() {
+  # After rewriting mp-operations.org -> marketplace.<IP>.nip.io, the DID helper ingress may collide
+  # with the marketplace root (both using host marketplace.* and path /). Ensure DID only serves
+  # /.well-known/* so the marketplace portal remains reachable at /.
+  if [[ "$SKIP_APPLY" -eq 1 ]]; then
+    return 0
+  fi
+  need_cmd kubectl
+  if [[ -z "${KUBECONFIG:-}" && -f "$HOME/.kube/config" ]]; then
+    export KUBECONFIG="$HOME/.kube/config"
+  fi
+  if [[ -z "${KUBECONFIG:-}" ]]; then
+    return 0
+  fi
+
+  local ns="provider"
+  local did_ing="provider-did"
+  local host path
+  host="$(kubectl --kubeconfig="$KUBECONFIG" -n "$ns" get ingress "$did_ing" -o jsonpath='{.spec.rules[0].host}' 2>/dev/null || true)"
+  path="$(kubectl --kubeconfig="$KUBECONFIG" -n "$ns" get ingress "$did_ing" -o jsonpath='{.spec.rules[0].http.paths[0].path}' 2>/dev/null || true)"
+  if [[ -z "$host" || -z "$path" ]]; then
+    return 0
+  fi
+
+  if [[ "$host" == marketplace.* && "$path" == "/" ]]; then
+    echo
+    echo "=== Fixing marketplace ingress conflict (provider-did) ==="
+    echo "Detected $ns/$did_ing at host=$host path=/; patching to /.well-known/ ..."
+    kubectl --kubeconfig="$KUBECONFIG" -n "$ns" patch ingress "$did_ing" --type=json \
+      -p='[{"op":"replace","path":"/spec/rules/0/http/paths/0/path","value":"/.well-known/"}]' >/dev/null
+    echo "Patched $ns/$did_ing to path /.well-known/."
+  fi
+}
+
+fix_vcverifier_no_proxy_for_marketplace() {
+  # The demo enables a Squid proxy for verifier egress to support did:web resolution for
+  # "real" domains. In the internal nip.io setup, the verifier must fetch the request object
+  # from the marketplace host directly (request_uri=https://marketplace.<IP>.nip.io/auth/vc/request.jwt).
+  # If the proxy is used, the CONNECT may be blocked or resolution may fail.
+  if [[ "$SKIP_APPLY" -eq 1 ]]; then
+    return 0
+  fi
+  need_cmd kubectl
+  if [[ -z "${KUBECONFIG:-}" && -f "$HOME/.kube/config" ]]; then
+    export KUBECONFIG="$HOME/.kube/config"
+  fi
+  if [[ -z "${KUBECONFIG:-}" ]]; then
+    return 0
+  fi
+
+  local ns="provider"
+  local deploy="verifier"
+  if ! kubectl --kubeconfig="$KUBECONFIG" -n "$ns" get deploy "$deploy" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local marketplace_host="marketplace.${TARGET_IP}.nip.io"
+  local current_np
+  current_np="$(kubectl --kubeconfig="$KUBECONFIG" -n "$ns" get deploy "$deploy" -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="NO_PROXY")].value}' 2>/dev/null || true)"
+  if [[ "$current_np" == *"$marketplace_host"* ]]; then
+    return 0
+  fi
+
+  local desired_np=""
+  if [[ -n "$current_np" ]]; then
+    desired_np="${current_np},${marketplace_host},.nip.io,${TARGET_IP}"
+  else
+    desired_np="credentials-config-service,w3.org,trusted-issuers-list,${marketplace_host},.nip.io,${TARGET_IP}"
+  fi
+
+  echo
+  echo "=== Fixing verifier NO_PROXY for marketplace ==="
+  echo "Ensuring $ns/$deploy bypasses proxy for: $marketplace_host"
+
+  # Try to replace existing NO_PROXY first; if absent, append a new env var.
+  if kubectl --kubeconfig="$KUBECONFIG" -n "$ns" get deploy "$deploy" -o json | grep -q '"name":"NO_PROXY"'; then
+    kubectl --kubeconfig="$KUBECONFIG" -n "$ns" patch deploy "$deploy" --type=json \
+      -p="[
+        {\"op\":\"replace\",\"path\":\"/spec/template/spec/containers/0/env\",\"value\":$(kubectl --kubeconfig=\"$KUBECONFIG\" -n \"$ns\" get deploy \"$deploy\" -o jsonpath='{.spec.template.spec.containers[0].env}' | python3 -c 'import json,sys; env=json.loads(sys.stdin.read());\nfor e in env:\n  if e.get(\"name\")==\"NO_PROXY\":\n    e[\"value\"]=sys.argv[1]\nprint(json.dumps(env))' \"$desired_np\") }
+      ]" >/dev/null 2>&1 || true
+  else
+    kubectl --kubeconfig="$KUBECONFIG" -n "$ns" set env deploy/"$deploy" NO_PROXY="$desired_np" >/dev/null 2>&1 || true
+  fi
+
+  kubectl --kubeconfig="$KUBECONFIG" -n "$ns" rollout restart deploy/"$deploy" >/dev/null 2>&1 || true
+  echo "Verifier updated; it should now resolve request_uri without proxy issues."
+}
+
 deploy_url_portal() {
   if [[ "$DEPLOY_URL_PORTAL" -ne 1 ]]; then
     echo "Skipping DSC URL portal deployment (--skip-url-portal)."
@@ -630,6 +718,8 @@ ensure_k3s_and_kubeconfig
 install_headlamp
 build_manifests
 apply_manifests
+fix_marketplace_did_ingress_conflict
+fix_vcverifier_no_proxy_for_marketplace
 deploy_url_portal
 
 echo
