@@ -278,19 +278,82 @@ apply_manifests() {
     return 0
   fi
   need_cmd kubectl
+  if [[ -z "${KUBECONFIG:-}" && -f "$HOME/.kube/config" ]]; then
+    export KUBECONFIG="$HOME/.kube/config"
+  fi
+  if [[ -z "${KUBECONFIG:-}" ]]; then
+    echo "error: KUBECONFIG is not set. Export KUBECONFIG or run without --skip-k3s-install." >&2
+    exit 1
+  fi
+  kubectl --kubeconfig="$KUBECONFIG" cluster-info >/dev/null
   local k3s_dir="$REPO_ROOT/target/k3s"
   if [[ ! -d "$k3s_dir" ]]; then
     echo "error: $k3s_dir not found (build likely failed or was skipped)." >&2
     exit 1
   fi
-  kubectl apply -f "$k3s_dir/namespaces" --recursive
-  kubectl apply -f "$k3s_dir/infra/mongo-operator" --recursive
+
+  wait_for_crd_established() {
+    local crd_name="$1"
+    local timeout_sec="${2:-300}"
+    local try=1
+    local max_tries=30
+    while [[ "$try" -le "$max_tries" ]]; do
+      if kubectl --kubeconfig="$KUBECONFIG" get crd "$crd_name" >/dev/null 2>&1; then
+        kubectl --kubeconfig="$KUBECONFIG" wait --for=condition=Established "crd/$crd_name" --timeout="${timeout_sec}s" >/dev/null
+        return 0
+      fi
+      echo "Waiting for CRD $crd_name (attempt $try/$max_tries)..."
+      sleep 5
+      try=$((try + 1))
+    done
+    echo "error: CRD $crd_name not available in time" >&2
+    return 1
+  }
+
+  wait_for_cert_manager_webhook() {
+    echo "Waiting for cert-manager webhook deployment..."
+    kubectl --kubeconfig="$KUBECONFIG" -n cert-manager wait deploy/cert-manager-webhook --for=condition=Available --timeout=300s
+    local try=1
+    local max_tries=30
+    while [[ "$try" -le "$max_tries" ]]; do
+      if kubectl --kubeconfig="$KUBECONFIG" -n cert-manager get endpoints cert-manager-webhook -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null | grep -qE '^[0-9]'; then
+        echo "cert-manager-webhook endpoints are available."
+        return 0
+      fi
+      echo "Waiting for cert-manager-webhook endpoints (attempt $try/$max_tries)..."
+      sleep 5
+      try=$((try + 1))
+    done
+    echo "error: cert-manager-webhook has no endpoints in time" >&2
+    return 1
+  }
+
+  retry_apply_tree() {
+    local path="$1"
+    local tries="${2:-3}"
+    local n=1
+    while [[ "$n" -le "$tries" ]]; do
+      if kubectl --kubeconfig="$KUBECONFIG" apply -f "$path" --recursive; then
+        return 0
+      fi
+      echo "kubectl apply failed for $path (attempt $n/$tries), retrying in 10s..."
+      sleep 10
+      n=$((n + 1))
+    done
+    return 1
+  }
+
+  kubectl --kubeconfig="$KUBECONFIG" apply -f "$k3s_dir/namespaces" --recursive
+  kubectl --kubeconfig="$KUBECONFIG" apply -f "$k3s_dir/infra/mongo-operator" --recursive
   if [[ -f "$k3s_dir/infra/operatorconfigurations.yaml" ]]; then
-    kubectl apply -f "$k3s_dir/infra/operatorconfigurations.yaml"
+    kubectl --kubeconfig="$KUBECONFIG" apply -f "$k3s_dir/infra/operatorconfigurations.yaml"
   fi
-  kubectl apply -f "$k3s_dir/infra/postgres-operator" --recursive
-  kubectl apply -f "$k3s_dir/infra/cert-manager" --recursive
-  kubectl apply -f "$k3s_dir" --recursive
+  kubectl --kubeconfig="$KUBECONFIG" apply -f "$k3s_dir/infra/postgres-operator" --recursive
+  wait_for_crd_established "postgresqls.acid.zalan.do" 300
+  kubectl --kubeconfig="$KUBECONFIG" apply -f "$k3s_dir/infra/cert-manager" --recursive
+  wait_for_crd_established "certificates.cert-manager.io" 300
+  wait_for_cert_manager_webhook
+  retry_apply_tree "$k3s_dir" 3
 }
 
 while [[ $# -gt 0 ]]; do
