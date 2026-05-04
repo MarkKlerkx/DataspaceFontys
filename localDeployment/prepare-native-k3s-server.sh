@@ -219,6 +219,10 @@ ensure_k3s_and_kubeconfig() {
   sudo systemctl enable k3s >/dev/null 2>&1 || true
   sudo systemctl start k3s
 
+  echo
+  echo "=== k3s install/start status ==="
+  sudo systemctl status k3s --no-pager || true
+
   if [[ ! -f /etc/rancher/k3s/k3s.yaml ]]; then
     echo "error: /etc/rancher/k3s/k3s.yaml not found after k3s start" >&2
     exit 1
@@ -230,9 +234,33 @@ ensure_k3s_and_kubeconfig() {
   chmod 600 "$HOME/.kube/config"
   export KUBECONFIG="$HOME/.kube/config"
 
-  echo "Verifying kubectl connectivity..."
-  kubectl --kubeconfig="$KUBECONFIG" cluster-info >/dev/null
+  echo
+  echo "=== waiting for positive k3s readiness ==="
+  local max_tries=18
+  local try=1
+  local ready=0
+  while [[ "$try" -le "$max_tries" ]]; do
+    if kubectl --kubeconfig="$KUBECONFIG" get nodes 2>/dev/null | awk 'NR>1 {if ($2=="Ready") ok=1} END {exit(ok?0:1)}'; then
+      ready=1
+      break
+    fi
+    echo "k3s not ready yet (attempt $try/$max_tries), retrying in 10s..."
+    sleep 10
+    try=$((try + 1))
+  done
+
+  if [[ "$ready" -ne 1 ]]; then
+    echo "error: k3s did not become Ready in expected time." >&2
+    echo "--- recent k3s logs ---"
+    sudo journalctl -u k3s -n 80 --no-pager || true
+    exit 1
+  fi
+
+  echo
+  echo "=== positive k3s readiness confirmed ==="
+  kubectl --kubeconfig="$KUBECONFIG" cluster-info
   kubectl --kubeconfig="$KUBECONFIG" get nodes
+  echo "k3s is healthy. Continuing with Maven deploy and kubectl apply..."
 }
 
 build_manifests() {
