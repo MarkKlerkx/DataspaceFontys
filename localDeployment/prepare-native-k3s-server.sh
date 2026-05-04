@@ -21,10 +21,12 @@ INCLUDE_DOCS=0
 SKIP_BUILD=0
 SKIP_APPLY=0
 SKIP_K3S_INSTALL=0
+DO_CLONE=0
 IP_ARG=""
 
 POM_FILE=""
 TARGET_IP=""
+LOG_FILE=""
 
 declare -a CANDIDATE_FILES=()
 declare -a NIP_FILES=()
@@ -37,6 +39,7 @@ Usage:
 
 Options:
   --repo <path>       Repository root (default: current directory)
+  --clone             Clone FIWARE/data-space-connector into --repo (or ./data-space-connector)
   --ip <address>      Internal server IP to materialize
   --yes               Skip confirmation prompt
   --include-docs      Also update doc/**/*.md and doc/**/*.drawio
@@ -88,6 +91,39 @@ discover_repo() {
     echo "error: no root pom.xml found in $REPO_ROOT" >&2
     exit 1
   fi
+}
+
+clone_repo_if_requested() {
+  if [[ "$DO_CLONE" -ne 1 ]]; then
+    return 0
+  fi
+
+  need_cmd git
+
+  # If user didn't specify --repo, clone into a sensible default subfolder.
+  if [[ "$REPO_ROOT" == "$(pwd)" ]]; then
+    REPO_ROOT="$(pwd)/data-space-connector"
+  fi
+
+  if [[ -d "$REPO_ROOT/.git" ]]; then
+    echo "Repo already cloned at $REPO_ROOT (.git exists). Skipping clone."
+    return 0
+  fi
+  if [[ -e "$REPO_ROOT" ]]; then
+    echo "error: --clone target already exists but is not a git repo: $REPO_ROOT" >&2
+    exit 1
+  fi
+
+  echo "Cloning FIWARE/data-space-connector into: $REPO_ROOT"
+  git clone https://github.com/FIWARE/data-space-connector.git "$REPO_ROOT"
+}
+
+setup_logging() {
+  LOG_FILE="$REPO_ROOT/build.log"
+  : >"$LOG_FILE"
+  exec > >(tee -a "$LOG_FILE") 2>&1
+  echo "Logging to: $LOG_FILE"
+  echo
 }
 
 discover_pom() {
@@ -157,7 +193,7 @@ print_findings() {
     echo "   - install via: curl -sfL https://get.k3s.io | sh -   (when missing)"
     echo "   - ensure kubeconfig at \$HOME/.kube/config for current user"
   fi
-  echo "5) Run: mvn -f \"$POM_FILE\" clean deploy -Plocal -Dhelm.version=3.20.2 | tee build.log"
+  echo "5) Run: mvn -f \"$POM_FILE\" clean deploy -Plocal -Dhelm.version=3.20.2   (logs go to build.log)"
   if [[ "$SKIP_APPLY" -eq 1 ]]; then
     echo "6) Skip kubectl apply (--skip-apply set)"
   else
@@ -269,7 +305,7 @@ build_manifests() {
     return 0
   fi
   need_cmd mvn
-  mvn -f "$POM_FILE" clean deploy -Plocal -Dhelm.version=3.20.2 2>&1 | tee "$REPO_ROOT/build.log"
+  mvn -f "$POM_FILE" clean deploy -Plocal -Dhelm.version=3.20.2
 }
 
 apply_manifests() {
@@ -363,6 +399,7 @@ while [[ $# -gt 0 ]]; do
       REPO_ROOT="$2"
       shift 2
       ;;
+    --clone) DO_CLONE=1; shift ;;
     --ip)
       [[ $# -gt 1 ]] || { echo "error: --ip requires a value" >&2; exit 1; }
       IP_ARG="$2"
@@ -382,7 +419,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+clone_repo_if_requested
 discover_repo
+setup_logging
 discover_pom
 collect_candidate_files
 scan_findings
