@@ -1,0 +1,300 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ingress-url-portal
+  namespace: kube-system
+data:
+  generate.py: |
+    import json
+    import os
+    import subprocess
+    import base64
+    from datetime import datetime, timezone
+
+    OUT_PATH = os.environ.get("OUT_PATH", "/www/index.html")
+    CA_OUT = os.environ.get("CA_OUT", "/www/dsconnector-ca.crt")
+
+    def sh(cmd: list[str]) -> str:
+      return subprocess.check_output(cmd, text=True)
+
+    def get_json(cmd: list[str]) -> dict:
+      return json.loads(sh(cmd))
+
+    def get_ingresses() -> list[dict]:
+      data = get_json(["kubectl", "get", "ingress", "-A", "-o", "json"])
+      return data.get("items", [])
+
+    def get_nodes_internal_ip() -> str | None:
+      data = get_json(["kubectl", "get", "nodes", "-o", "json"])
+      for n in data.get("items", []):
+        for addr in ((n.get("status") or {}).get("addresses") or []):
+          if addr.get("type") == "InternalIP" and addr.get("address"):
+            return addr["address"]
+      return None
+
+    def get_nodeport(ns: str, svc: str) -> int | None:
+      try:
+        data = get_json(["kubectl", "-n", ns, "get", "svc", svc, "-o", "json"])
+        ports = ((data.get("spec") or {}).get("ports") or [])
+        if ports and ports[0].get("nodePort"):
+          return int(ports[0]["nodePort"])
+      except Exception:
+        return None
+      return None
+
+    def refresh_ca_cert() -> bool:
+      # Read cert-manager/ca-secret tls.crt and write it as dsconnector-ca.crt
+      try:
+        data = get_json(["kubectl", "-n", "cert-manager", "get", "secret", "ca-secret", "-o", "json"])
+        b64 = (((data.get("data") or {}).get("tls.crt")) or "")
+        if not b64:
+          return False
+        crt = base64.b64decode(b64.encode("utf-8"))
+        os.makedirs(os.path.dirname(CA_OUT), exist_ok=True)
+        with open(CA_OUT, "wb") as f:
+          f.write(crt)
+        return True
+      except Exception:
+        return False
+
+    def tls_hosts(ing: dict) -> set[str]:
+      hosts: set[str] = set()
+      tls = (ing.get("spec") or {}).get("tls") or []
+      for t in tls:
+        for h in (t.get("hosts") or []):
+          hosts.add(h)
+      return hosts
+
+    def rules_hosts(ing: dict) -> list[str]:
+      hosts: list[str] = []
+      rules = (ing.get("spec") or {}).get("rules") or []
+      for r in rules:
+        h = r.get("host")
+        if h:
+          hosts.append(h)
+      return hosts
+
+    def classify(host: str) -> tuple[int, str, str]:
+      # Lower sort rank => higher in list
+      h = host.lower()
+      note = ""
+      rank = 100
+      label = "Ingress"
+
+      if "keycloak" in h:
+        rank = 0
+        label = "Keycloak"
+      if h.startswith("dashboard-provider."):
+        rank = 1
+        label = "Provider dashboard"
+        note = "Login: admin / test"
+      if h.startswith("dashboard-consumer."):
+        rank = 2
+        label = "Consumer dashboard"
+      return rank, label, note
+
+    def main():
+      internal_ip = get_nodes_internal_ip() or ""
+      headlamp_port = get_nodeport("kube-system", "my-headlamp")
+      headlamp_url = (f"http://{internal_ip}:{headlamp_port}" if internal_ip and headlamp_port else "")
+      ca_ok = refresh_ca_cert()
+
+      items = []
+      for ing in get_ingresses():
+        ns = (ing.get("metadata") or {}).get("namespace", "")
+        name = (ing.get("metadata") or {}).get("name", "")
+        tls = tls_hosts(ing)
+        for host in rules_hosts(ing):
+          scheme = "https" if host in tls else "http"
+          rank, label, note = classify(host)
+          items.append({
+            "rank": rank,
+            "label": label,
+            "namespace": ns,
+            "name": name,
+            "host": host,
+            "url": f"{scheme}://{host}",
+            "note": note,
+            "scheme": scheme,
+          })
+
+      items.sort(key=lambda x: (x["rank"], x["label"], x["host"]))
+      now = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+
+      rows = "\n".join(
+        f"<tr>"
+        f"<td class='type'>{i['label']}</td>"
+        f"<td class='url'><a href='{i['url']}' target='_blank' rel='noreferrer'>{i['url']}</a></td>"
+        f"<td class='meta'><code>{i['namespace']}/{i['name']}</code></td>"
+        f"<td class='note'>{i['note']}</td>"
+        f"</tr>"
+        for i in items
+      )
+
+      headlamp_block = ""
+      if headlamp_url:
+        headlamp_block = f"""
+        <div class="card">
+          <div class="card-title">Headlamp</div>
+          <div class="card-row"><a href="{headlamp_url}" target="_blank" rel="noreferrer">{headlamp_url}</a></div>
+          <div class="card-row">
+            <button id="btn-token">Get Headlamp token</button>
+            <span id="token-status" class="muted"></span>
+          </div>
+          <pre id="token-out" style="display:none;"><code></code></pre>
+        </div>
+        """
+
+      ca_block = f"""
+        <div class="card">
+          <div class="card-title">TLS / Certificates</div>
+          <div class="card-row">
+            <a href="/dsconnector-ca.crt">Download dsconnector-ca.crt</a>
+            <span class="muted">{' (available)' if ca_ok else ' (not available yet: cert-manager/ca-secret missing?)'}</span>
+          </div>
+          <div class="card-row muted">Windows (Admin): <code>certutil -addstore -f Root dsconnector-ca.crt</code></div>
+          <div class="card-row muted">Windows check: <code>certutil -store Root | findstr /i "selfsigned-ca"</code></div>
+          <div class="card-row muted">Restart browser after import.</div>
+        </div>
+      """
+
+      html = f"""<!doctype html>
+    <html lang="nl">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>DSC URL Portal</title>
+      <style>
+        body {{ font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; background: #0b1220; color: #e5e7eb; }}
+        header {{ padding: 18px 20px; border-bottom: 1px solid rgba(255,255,255,0.08); background: #0b1220; position: sticky; top: 0; }}
+        h1 {{ margin: 0; font-size: 16px; letter-spacing: 0.2px; }}
+        .sub {{ margin-top: 6px; font-size: 12px; opacity: 0.75; }}
+        main {{ padding: 16px 20px 28px; }}
+        .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; margin-bottom: 14px; }}
+        .card {{ background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px; }}
+        .card-title {{ font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.8; margin-bottom: 8px; }}
+        .card-row {{ margin-top: 6px; }}
+        button {{ background: #2563eb; color: #fff; border: 0; border-radius: 8px; padding: 8px 10px; cursor: pointer; font-weight: 600; }}
+        button:disabled {{ opacity: 0.5; cursor: default; }}
+        table {{ width: 100%; border-collapse: collapse; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; overflow: hidden; }}
+        th, td {{ text-align: left; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); vertical-align: top; }}
+        th {{ font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.8; }}
+        td {{ font-size: 13px; }}
+        a {{ color: #93c5fd; text-decoration: none; }}
+        a:hover {{ text-decoration: underline; }}
+        code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 6px; }}
+        .note {{ white-space: nowrap; }}
+        .type {{ white-space: nowrap; opacity: 0.9; }}
+        .url {{ word-break: break-all; }}
+        .muted {{ opacity: 0.75; }}
+        footer {{ margin-top: 10px; font-size: 12px; opacity: 0.7; }}
+      </style>
+    </head>
+    <body>
+      <header>
+        <h1>DSC URL Portal</h1>
+        <div class="sub">Gebaseerd op Kubernetes Ingress (Traefik). Laatst ververst: {now}</div>
+      </header>
+      <main>
+        <div class="grid">
+          {ca_block}
+          {headlamp_block}
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>URL</th>
+              <th>Ingress</th>
+              <th>Info</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows if rows else "<tr><td colspan='4'>Geen ingresses gevonden of geen rechten om ze te lezen.</td></tr>"}
+          </tbody>
+        </table>
+        <footer>
+          Tip: als je nog certificaatwarnings ziet, installeer de cluster CA en herstart je browser.
+        </footer>
+      </main>
+      <script>
+        const btn = document.getElementById('btn-token');
+        if (btn) {
+          const status = document.getElementById('token-status');
+          const out = document.getElementById('token-out');
+          const outCode = out.querySelector('code');
+          btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            status.textContent = ' fetching token...';
+            try {
+              const resp = await fetch('/api/headlamp-token');
+              const txt = await resp.text();
+              out.style.display = 'block';
+              outCode.textContent = txt.trim();
+              status.textContent = resp.ok ? ' ok' : ' failed';
+            } catch (e) {
+              status.textContent = ' failed';
+            } finally {
+              btn.disabled = false;
+            }
+          });
+        }
+      </script>
+    </body>
+    </html>
+    """
+
+      os.makedirs(os.path.dirname(OUT_PATH), exist_ok=True)
+      with open(OUT_PATH, "w", encoding="utf-8") as f:
+        f.write(html)
+
+    if __name__ == "__main__":
+      main()
+
+  server.py: |
+    import os
+    import subprocess
+    import threading
+    import time
+    from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
+    from urllib.parse import urlparse
+
+    WWW_DIR = os.environ.get("WWW_DIR", "/www")
+    OUT_PATH = os.environ.get("OUT_PATH", f"{WWW_DIR}/index.html")
+
+    def run_generate_loop():
+      while True:
+        try:
+          subprocess.check_call(["python3", "/app/generate.py"], env={**os.environ, "OUT_PATH": OUT_PATH})
+        except Exception:
+          pass
+        time.sleep(10)
+
+    class Handler(SimpleHTTPRequestHandler):
+      def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=WWW_DIR, **kwargs)
+
+      def do_GET(self):
+        path = urlparse(self.path).path
+        if path == "/api/headlamp-token":
+          self.send_response(200)
+          self.send_header("Content-Type", "text/plain; charset=utf-8")
+          self.end_headers()
+          try:
+            token = subprocess.check_output(
+              ["kubectl", "-n", "kube-system", "create", "token", "my-headlamp"],
+              text=True,
+              stderr=subprocess.STDOUT,
+            )
+            self.wfile.write(token.encode("utf-8"))
+          except subprocess.CalledProcessError as e:
+            self.wfile.write((e.output or "failed\n").encode("utf-8"))
+          return
+        return super().do_GET()
+
+    if __name__ == "__main__":
+      os.makedirs(WWW_DIR, exist_ok=True)
+      t = threading.Thread(target=run_generate_loop, daemon=True)
+      t.start()
+      srv = ThreadingHTTPServer(("0.0.0.0", 8080), Handler)
+      srv.serve_forever()

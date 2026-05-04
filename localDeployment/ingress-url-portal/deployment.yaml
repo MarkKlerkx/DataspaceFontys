@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingress-url-portal
+  namespace: kube-system
+  labels:
+    app: ingress-url-portal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ingress-url-portal
+  template:
+    metadata:
+      labels:
+        app: ingress-url-portal
+    spec:
+      serviceAccountName: ingress-url-portal
+      containers:
+        - name: portal
+          image: alpine:3.20
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: OUT_PATH
+              value: /www/index.html
+            - name: CA_OUT
+              value: /www/dsconnector-ca.crt
+            - name: WWW_DIR
+              value: /www
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              apk add --no-cache python3 kubectl >/dev/null
+              mkdir -p /www
+              exec python3 /app/server.py
+          volumeMounts:
+            - name: app
+              mountPath: /app
+              readOnly: true
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+      volumes:
+        - name: app
+          configMap:
+            name: ingress-url-portal
+
