@@ -24,6 +24,10 @@ SKIP_APPLY=0
 SKIP_K3S_INSTALL=0
 DO_CLONE=0
 SKIP_HEADLAMP=0
+DEPLOY_URL_PORTAL=1
+PORTAL_REPO_URL="https://github.com/MarkKlerkx/DataspaceFontys.git"
+PORTAL_DIR="$HOME/DataspaceFontys"
+PORTAL_KUSTOMIZE_PATH="localDeployment/ingress-url-portal"
 IP_ARG=""
 
 POM_FILE=""
@@ -49,6 +53,7 @@ Options:
   --include-docs      Also update doc/**/*.md and doc/**/*.drawio
   --skip-k3s-install  Do not install/start k3s automatically
   --skip-headlamp     Do not install/configure Headlamp UI
+  --skip-url-portal   Do not deploy the DSC URL portal (DataspaceFontys)
   --skip-build        Do not run Maven build/deploy
   --skip-apply        Do not run kubectl apply for target/k3s manifests
   -h, --help          Show this help
@@ -187,6 +192,10 @@ print_findings() {
   echo "1) Upsert <k3s.skipRun>true</k3s.skipRun> and <k3s.skipApply>true</k3s.skipApply> in pom.xml"
   echo "2) Replace 127.0.0.1.nip.io -> {INTERNAL_IP}.nip.io in candidate files"
   echo "3) Replace {INTERNAL_IP} -> $TARGET_IP in candidate files"
+  echo "3b) Rewrite demo domains to internal nip.io hosts (keep did:web:* unchanged):"
+  echo "    - verifier.mp-operations.org -> verifier.$TARGET_IP.nip.io"
+  echo "    - mp-operations.org -> marketplace.$TARGET_IP.nip.io"
+  echo "    - fancy-marketplace.biz -> fancy-marketplace.$TARGET_IP.nip.io"
   if [[ "$SKIP_K3S_INSTALL" -eq 1 ]]; then
     echo "4) Skip native k3s install/start (--skip-k3s-install set)"
   else
@@ -199,6 +208,11 @@ print_findings() {
     echo "6) Skip kubectl apply (--skip-apply set)"
   else
     echo "6) Run kubectl apply in target/k3s (ordered infra + full tree)"
+  fi
+  if [[ "$DEPLOY_URL_PORTAL" -eq 1 ]]; then
+    echo "7) Deploy DSC URL portal (DataspaceFontys) and print portal URL"
+  else
+    echo "7) Skip DSC URL portal deployment (--skip-url-portal set)"
   fi
   echo "==================================="
 }
@@ -230,6 +244,38 @@ rewrite_hosts() {
   for f in "${CANDIDATE_FILES[@]}"; do
     sed -i 's/127\.0\.0\.1\.nip\.io/{INTERNAL_IP}.nip.io/g' "$f"
     sed -i "s/{INTERNAL_IP}/$TARGET_IP/g" "$f"
+  done
+}
+
+rewrite_demo_domains() {
+  local f=""
+  local marketplace_host="marketplace.${TARGET_IP}.nip.io"
+  local verifier_host="verifier.${TARGET_IP}.nip.io"
+  local fancy_host="fancy-marketplace.${TARGET_IP}.nip.io"
+
+  # Protect did:web:* identifiers (they should remain stable).
+  for f in "${CANDIDATE_FILES[@]}"; do
+    sed -i 's/did:web:mp-operations\.org/did:web:__MP_OPS__/g' "$f"
+    sed -i 's/did:web:fancy-marketplace\.biz/did:web:__FANCY__/g' "$f"
+
+    # verifier.mp-operations.org
+    sed -i "s#https://verifier\.mp-operations\.org#https://${verifier_host}#g" "$f"
+    sed -i "s#http://verifier\.mp-operations\.org#http://${verifier_host}#g" "$f"
+    sed -i "s/verifier\.mp-operations\.org/${verifier_host}/g" "$f"
+
+    # mp-operations.org (marketplace host)
+    sed -i "s#https://mp-operations\.org#https://${marketplace_host}#g" "$f"
+    sed -i "s#http://mp-operations\.org#http://${marketplace_host}#g" "$f"
+    sed -i "s/mp-operations\.org/${marketplace_host}/g" "$f"
+
+    # fancy-marketplace.biz (consumer demo host)
+    sed -i "s#https://fancy-marketplace\.biz#https://${fancy_host}#g" "$f"
+    sed -i "s#http://fancy-marketplace\.biz#http://${fancy_host}#g" "$f"
+    sed -i "s/fancy-marketplace\.biz/${fancy_host}/g" "$f"
+
+    # Restore did:web:* identifiers.
+    sed -i 's/did:web:__MP_OPS__/did:web:mp-operations.org/g' "$f"
+    sed -i 's/did:web:__FANCY__/did:web:fancy-marketplace.biz/g' "$f"
   done
 }
 
@@ -501,6 +547,32 @@ apply_manifests() {
   retry_apply_tree "$k3s_dir" 3
 }
 
+deploy_url_portal() {
+  if [[ "$DEPLOY_URL_PORTAL" -ne 1 ]]; then
+    echo "Skipping DSC URL portal deployment (--skip-url-portal)."
+    return 0
+  fi
+  need_cmd git
+  need_cmd kubectl
+
+  echo
+  echo "=== Deploying DSC URL portal ==="
+  if [[ -d "$PORTAL_DIR/.git" ]]; then
+    (cd "$PORTAL_DIR" && git pull --ff-only) || true
+  else
+    git clone "$PORTAL_REPO_URL" "$PORTAL_DIR"
+  fi
+
+  local kpath="$PORTAL_DIR/$PORTAL_KUSTOMIZE_PATH"
+  if [[ ! -d "$kpath" ]]; then
+    echo "error: portal kustomize path not found: $kpath" >&2
+    return 1
+  fi
+  kubectl apply -k "$kpath"
+  kubectl -n kube-system rollout status deploy/ingress-url-portal --timeout=180s || true
+  echo "Portal URL: http://${TARGET_IP}:30091/"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo)
@@ -519,6 +591,7 @@ while [[ $# -gt 0 ]]; do
     --include-docs) INCLUDE_DOCS=1; shift ;;
     --skip-k3s-install) SKIP_K3S_INSTALL=1; shift ;;
     --skip-headlamp) SKIP_HEADLAMP=1; shift ;;
+    --skip-url-portal) DEPLOY_URL_PORTAL=0; shift ;;
     --skip-build) SKIP_BUILD=1; shift ;;
     --skip-apply) SKIP_APPLY=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -552,10 +625,12 @@ cp "$POM_FILE" "$POM_FILE.bak.$(date +%Y%m%d%H%M%S)"
 upsert_pom_property "k3s.skipRun" "true"
 upsert_pom_property "k3s.skipApply" "true"
 rewrite_hosts
+rewrite_demo_domains
 ensure_k3s_and_kubeconfig
 install_headlamp
 build_manifests
 apply_manifests
+deploy_url_portal
 
 echo
 echo "Done."
@@ -568,3 +643,23 @@ if [[ -n "${HEADLAMP_URL:-}" ]]; then
   echo "Token (after: source ~/.bashrc): headlamp-token"
   echo "========================================="
 fi
+
+if [[ "$DEPLOY_URL_PORTAL" -eq 1 ]]; then
+  echo
+  echo "========================================="
+  echo "DSC URL PORTAL"
+  echo "http://${TARGET_IP}:30091/"
+  echo "========================================="
+fi
+
+echo
+echo "========================================="
+echo "TLS TRUST (recommended for browsers)"
+echo "This deployment uses a local self-signed CA via cert-manager."
+echo "Export the CA cert on the k3s node:"
+echo "  kubectl -n cert-manager get secret ca-secret -o jsonpath='{.data.tls\\.crt}' | base64 -d > dsconnector-ca.crt"
+echo
+echo "Install CA cert on your client machine to avoid 'Failed to fetch' / ERR_CERT_AUTHORITY_INVALID:"
+echo "- Linux (Debian/Ubuntu): sudo cp dsconnector-ca.crt /usr/local/share/ca-certificates/ && sudo update-ca-certificates"
+echo "- Windows (Admin PowerShell/CMD): certutil -addstore -f Root dsconnector-ca.crt"
+echo "========================================="
