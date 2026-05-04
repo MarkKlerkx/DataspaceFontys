@@ -151,9 +151,10 @@ data:
           <div class="card-row"><a href="{headlamp_url}" target="_blank" rel="noreferrer">{headlamp_url}</a></div>
           <div class="card-row">
             <button id="btn-token">Get Headlamp token</button>
+            <button id="btn-copy" class="secondary" disabled>Copy</button>
             <span id="token-status" class="muted"></span>
           </div>
-          <pre id="token-out" style="display:none;"><code></code></pre>
+          <pre id="token-out" class="token" style="display:none;"><code></code></pre>
         </div>
         """
 
@@ -182,6 +183,7 @@ data:
         h1 {{ margin: 0; font-size: 16px; letter-spacing: 0.2px; }}
         .sub {{ margin-top: 6px; font-size: 12px; opacity: 0.75; }}
         main {{ padding: 16px 20px 28px; }}
+        .container {{ max-width: 48rem; margin: 0 auto; }}
         .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; margin-bottom: 14px; }}
         .card {{ background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px; }}
         .card-title {{ font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.8; margin-bottom: 8px; }}
@@ -189,8 +191,9 @@ data:
         .card-tls {{ border-color: rgba(16, 185, 129, 0.55); box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.10) inset; }}
         .card-headlamp {{ border-color: rgba(59, 130, 246, 0.55); box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.10) inset; }}
         button {{ background: #2563eb; color: #fff; border: 0; border-radius: 8px; padding: 8px 10px; cursor: pointer; font-weight: 600; }}
+        button.secondary {{ background: rgba(255,255,255,0.10); }}
         button:disabled {{ opacity: 0.5; cursor: default; }}
-        table {{ width: 100%; border-collapse: collapse; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; overflow: hidden; }}
+        table {{ width: 100%; table-layout: fixed; border-collapse: collapse; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; overflow: hidden; }}
         th, td {{ text-align: left; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); vertical-align: top; }}
         th {{ font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.8; }}
         td {{ font-size: 13px; }}
@@ -200,6 +203,7 @@ data:
         .note {{ white-space: nowrap; }}
         .url {{ word-break: break-all; }}
         .muted {{ opacity: 0.75; }}
+        .token code {{ white-space: pre-wrap; word-break: break-all; }}
         footer {{ margin-top: 10px; font-size: 12px; opacity: 0.7; }}
       </style>
     </head>
@@ -209,33 +213,37 @@ data:
         <div class="sub">Based on Kubernetes Ingress (Traefik). Last refresh: {now}</div>
       </header>
       <main>
-        <div class="grid">
-          {ca_block}
-          {headlamp_block}
+        <div class="container">
+          <div class="grid">
+            {ca_block}
+            {headlamp_block}
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 62%;">URL</th>
+                <th style="width: 38%;">Info</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows if rows else "<tr><td colspan='2'>No ingresses found (or missing permissions).</td></tr>"}
+            </tbody>
+          </table>
+          <footer>
+            Tip: if you still see certificate warnings, install the cluster CA and restart your browser.
+          </footer>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>URL</th>
-              <th>Info</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows if rows else "<tr><td colspan='2'>No ingresses found (or missing permissions).</td></tr>"}
-          </tbody>
-        </table>
-        <footer>
-          Tip: if you still see certificate warnings, install the cluster CA and restart your browser.
-        </footer>
       </main>
       <script>
         const btn = document.getElementById('btn-token');
+        const copyBtn = document.getElementById('btn-copy');
         if (btn) {{
           const status = document.getElementById('token-status');
           const out = document.getElementById('token-out');
           const outCode = out.querySelector('code');
           btn.addEventListener('click', async () => {{
             btn.disabled = true;
+            if (copyBtn) copyBtn.disabled = true;
             status.textContent = ' fetching token...';
             try {{
               const resp = await fetch('/api/headlamp-token');
@@ -243,10 +251,28 @@ data:
               out.style.display = 'block';
               outCode.textContent = txt.trim();
               status.textContent = resp.ok ? ' ok' : ' failed';
+              if (copyBtn && resp.ok && txt.trim().length > 0) copyBtn.disabled = false;
             }} catch (e) {{
               status.textContent = ' failed';
             }} finally {{
               btn.disabled = false;
+            }}
+          }});
+        }}
+
+        if (copyBtn) {{
+          copyBtn.addEventListener('click', async () => {{
+            const out = document.getElementById('token-out');
+            const outCode = out ? out.querySelector('code') : null;
+            const token = outCode ? outCode.textContent : '';
+            if (!token) return;
+            try {{
+              await navigator.clipboard.writeText(token);
+              const status = document.getElementById('token-status');
+              if (status) status.textContent = ' copied';
+            }} catch (e) {{
+              const status = document.getElementById('token-status');
+              if (status) status.textContent = ' copy failed';
             }}
           }});
         }}
