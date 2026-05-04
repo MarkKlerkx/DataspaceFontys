@@ -29,6 +29,8 @@ IP_ARG=""
 POM_FILE=""
 TARGET_IP=""
 LOG_FILE=""
+HEADLAMP_NODEPORT=""
+HEADLAMP_URL=""
 
 declare -a CANDIDATE_FILES=()
 declare -a NIP_FILES=()
@@ -269,6 +271,22 @@ ensure_k3s_and_kubeconfig() {
   chmod 600 "$HOME/.kube/config"
   export KUBECONFIG="$HOME/.kube/config"
 
+  # Persist kubeconfig for interactive kubectl usage after the script finishes.
+  local bashrc="$HOME/.bashrc"
+  local kc_marker_begin="# >>> kubectl-kubeconfig (added by prepare-native-k3s-server.sh) >>>"
+  local kc_marker_end="# <<< kubectl-kubeconfig <<<"
+  if [[ ! -f "$bashrc" ]]; then
+    touch "$bashrc"
+  fi
+  if ! grep -qF "$kc_marker_begin" "$bashrc" 2>/dev/null; then
+    cat >>"$bashrc" <<'EOF'
+
+# >>> kubectl-kubeconfig (added by prepare-native-k3s-server.sh) >>>
+export KUBECONFIG="$HOME/.kube/config"
+# <<< kubectl-kubeconfig <<<
+EOF
+  fi
+
   echo
   echo "=== waiting for positive k3s readiness ==="
   local max_tries=18
@@ -295,6 +313,10 @@ ensure_k3s_and_kubeconfig() {
   echo "=== positive k3s readiness confirmed ==="
   kubectl --kubeconfig="$KUBECONFIG" cluster-info
   kubectl --kubeconfig="$KUBECONFIG" get nodes
+  echo
+  echo "KUBECONFIG persisted in: $bashrc"
+  echo "To activate in your current shell:"
+  echo "  source $bashrc"
   echo "k3s is healthy. Continuing with Maven deploy and kubectl apply..."
 }
 
@@ -340,6 +362,12 @@ install_headlamp() {
   # Determine the chosen NodePort and print clear access instructions.
   local node_port=""
   node_port="$(kubectl --kubeconfig="$KUBECONFIG" -n "$ns" get svc "$release" -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || true)"
+  HEADLAMP_NODEPORT="$node_port"
+  if [[ -n "$HEADLAMP_NODEPORT" ]]; then
+    HEADLAMP_URL="http://${TARGET_IP}:${HEADLAMP_NODEPORT}"
+  else
+    HEADLAMP_URL=""
+  fi
 
   # Add convenience function to the user's interactive shell.
   local bashrc="$HOME/.bashrc"
@@ -353,24 +381,27 @@ install_headlamp() {
 
 $fn_marker_begin
 headlamp-token() {
-  sudo kubectl create token ${release} --namespace ${ns}
+  KUBECONFIG="\${KUBECONFIG:-\$HOME/.kube/config}" kubectl create token ${release} --namespace ${ns}
 }
 $fn_marker_end
 EOF
+  else
+    # If an older version was installed, update it in-place.
+    sed -i -E "s|sudo[[:space:]]+kubectl[[:space:]]+create[[:space:]]+token[[:space:]]+${release}[[:space:]]+--namespace[[:space:]]+${ns}|KUBECONFIG=\"\\\${KUBECONFIG:-\\\$HOME/.kube/config}\" kubectl create token ${release} --namespace ${ns}|g" "$bashrc" >/dev/null 2>&1 || true
   fi
 
   echo
   echo "Headlamp is installed."
-  if [[ -n "$node_port" ]]; then
-    echo "Headlamp NodePort: $node_port"
-    echo "Open: http://${TARGET_IP}:${node_port}"
+  if [[ -n "$HEADLAMP_NODEPORT" ]]; then
+    echo "Headlamp NodePort: $HEADLAMP_NODEPORT"
+    echo "Open: $HEADLAMP_URL"
   else
     echo "warning: could not determine Headlamp NodePort automatically. Run:"
     echo "  kubectl -n $ns get svc $release -o wide"
   fi
   echo
   echo "Headlamp token function added to: $bashrc"
-  echo "To activate in your current shell:"
+  echo "To activate in your current shell (or open a new terminal):"
   echo "  source $bashrc"
   echo "Then get a token with:"
   echo "  headlamp-token"
@@ -529,3 +560,11 @@ apply_manifests
 echo
 echo "Done."
 echo "Native k3s migration/deploy actions completed for: $REPO_ROOT"
+if [[ -n "${HEADLAMP_URL:-}" ]]; then
+  echo
+  echo "========================================="
+  echo "HEADLAMP URL"
+  echo "$HEADLAMP_URL"
+  echo "Token (after: source ~/.bashrc): headlamp-token"
+  echo "========================================="
+fi
