@@ -262,12 +262,41 @@ data:
     WWW_DIR = os.environ.get("WWW_DIR", "/www")
     OUT_PATH = os.environ.get("OUT_PATH", f"{WWW_DIR}/index.html")
 
+    def write_fallback_index(msg: str):
+      os.makedirs(WWW_DIR, exist_ok=True)
+      html = f"""<!doctype html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>DSC URL Portal (starting)</title>
+      <style>
+        body {{ font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #0b1220; color: #e5e7eb; margin: 0; }}
+        main {{ max-width: 48rem; margin: 2rem auto; padding: 0 1rem; }}
+        pre {{ background: rgba(255,255,255,0.06); padding: 1rem; border-radius: 10px; overflow: auto; }}
+        code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }}
+      </style>
+    </head>
+    <body>
+      <main>
+        <h1>DSC URL Portal is starting…</h1>
+        <p>The portal is running, but <code>index.html</code> was not generated yet.</p>
+        <p>It will retry every 10 seconds.</p>
+        <h2>Last error</h2>
+        <pre><code>{msg}</code></pre>
+      </main>
+    </body>
+    </html>
+    """
+      with open(OUT_PATH, "w", encoding="utf-8") as f:
+        f.write(html)
+
     def run_generate_loop():
       while True:
         try:
           subprocess.check_call(["python3", "/app/generate.py"], env={**os.environ, "OUT_PATH": OUT_PATH})
         except Exception:
-          pass
+          write_fallback_index("generate.py failed (check RBAC, cert-manager/ca-secret, or kubectl access).")
         time.sleep(10)
 
     class Handler(SimpleHTTPRequestHandler):
@@ -294,6 +323,9 @@ data:
 
     if __name__ == "__main__":
       os.makedirs(WWW_DIR, exist_ok=True)
+      # Ensure there's always an index page (avoid directory listing).
+      if not os.path.exists(OUT_PATH):
+        write_fallback_index("initial generation pending")
       t = threading.Thread(target=run_generate_loop, daemon=True)
       t.start()
       srv = ThreadingHTTPServer(("0.0.0.0", 8080), Handler)
