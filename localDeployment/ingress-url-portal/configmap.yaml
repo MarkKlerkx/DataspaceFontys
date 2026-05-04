@@ -175,6 +175,9 @@ data:
             <div class="card-row muted"><strong>Windows (Admin)</strong>: <code>certutil -addstore -f Root dsconnector-ca.crt</code></div>
             <div class="card-row muted"><strong>Verify</strong>: <code>certutil -store Root | findstr /i "selfsigned-ca"</code></div>
             <div class="card-row muted"><strong>Then</strong>: restart your browser.</div>
+            <div class="card-row muted"><strong>Tip</strong>: if you still see certificate warnings, import the CA and restart your browser.</div>
+            <div class="card-row muted"><strong>After a redeploy</strong>: the cluster CA may change — download the new <code>dsconnector-ca.crt</code> again and run:</div>
+            <div class="card-row"><code>certutil -addstore -f Root dsconnector-ca.crt</code></div>
           </div>
         </div>
       """
@@ -224,7 +227,14 @@ data:
         button:disabled {{ opacity: 0.5; cursor: default; }}
         table {{ width: 100%; table-layout: fixed; border-collapse: collapse; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; overflow: hidden; }}
         th, td {{ text-align: left; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); vertical-align: top; }}
-        th {{ font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.8; }}
+        th {{
+          font-size: 12px;
+          text-transform: uppercase;
+          letter-spacing: 0.12em;
+          opacity: 0.9;
+          background: linear-gradient(90deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03));
+          border-bottom: 1px solid rgba(255,255,255,0.10);
+        }}
         td {{ font-size: 13px; }}
         a {{ color: #93c5fd; text-decoration: none; }}
         a:hover {{ text-decoration: underline; }}
@@ -259,7 +269,7 @@ data:
             </tbody>
           </table>
           <footer>
-            Tip: if you still see certificate warnings, install the cluster CA and restart your browser.
+            <!-- Tips moved to TLS / Certificates box -->
             <span class="muted" style="float:right;">v{PORTAL_VERSION}</span>
           </footer>
         </div>
