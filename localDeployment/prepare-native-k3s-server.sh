@@ -16,6 +16,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(pwd)"
+REPO_PROVIDED=0
 FORCE_YES=0
 INCLUDE_DOCS=0
 SKIP_BUILD=0
@@ -94,14 +95,10 @@ discover_repo() {
 }
 
 clone_repo_if_requested() {
-  if [[ "$DO_CLONE" -ne 1 ]]; then
-    return 0
-  fi
-
   need_cmd git
 
   # If user didn't specify --repo, clone into a sensible default subfolder.
-  if [[ "$REPO_ROOT" == "$(pwd)" ]]; then
+  if [[ "$REPO_PROVIDED" -eq 0 ]]; then
     REPO_ROOT="$(pwd)/data-space-connector"
   fi
 
@@ -397,6 +394,7 @@ while [[ $# -gt 0 ]]; do
     --repo)
       [[ $# -gt 1 ]] || { echo "error: --repo requires a value" >&2; exit 1; }
       REPO_ROOT="$2"
+      REPO_PROVIDED=1
       shift 2
       ;;
     --clone) DO_CLONE=1; shift ;;
@@ -419,7 +417,15 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-clone_repo_if_requested
+# Convenience: if run without --repo in a directory without pom.xml, auto-clone.
+if [[ "$DO_CLONE" -ne 1 && "$REPO_PROVIDED" -eq 0 && ! -f "$REPO_ROOT/pom.xml" ]]; then
+  DO_CLONE=1
+fi
+
+if [[ "$DO_CLONE" -eq 1 ]]; then
+  clone_repo_if_requested
+fi
+
 discover_repo
 setup_logging
 discover_pom
