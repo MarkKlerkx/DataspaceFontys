@@ -93,7 +93,7 @@ data:
       h = host.lower()
       note = ""
       rank = 100
-      label = "Ingress"
+      label = "Service"
 
       if "keycloak" in h:
         rank = 0
@@ -137,9 +137,7 @@ data:
 
       rows = "\n".join(
         f"<tr>"
-        f"<td class='type'>{i['label']}</td>"
         f"<td class='url'><a href='{i['url']}' target='_blank' rel='noreferrer'>{i['url']}</a></td>"
-        f"<td class='meta'><code>{i['namespace']}/{i['name']}</code></td>"
         f"<td class='note'>{i['note']}</td>"
         f"</tr>"
         for i in items
@@ -148,7 +146,7 @@ data:
       headlamp_block = ""
       if headlamp_url:
         headlamp_block = f"""
-        <div class="card">
+        <div class="card card-headlamp">
           <div class="card-title">Headlamp</div>
           <div class="card-row"><a href="{headlamp_url}" target="_blank" rel="noreferrer">{headlamp_url}</a></div>
           <div class="card-row">
@@ -160,20 +158,20 @@ data:
         """
 
       ca_block = f"""
-        <div class="card">
+        <div class="card card-tls">
           <div class="card-title">TLS / Certificates</div>
           <div class="card-row">
             <a href="/dsconnector-ca.crt">Download dsconnector-ca.crt</a>
             <span class="muted">{' (available)' if ca_ok else ' (not available yet: cert-manager/ca-secret missing?)'}</span>
           </div>
-          <div class="card-row muted">Windows (Admin): <code>certutil -addstore -f Root dsconnector-ca.crt</code></div>
-          <div class="card-row muted">Windows check: <code>certutil -store Root | findstr /i "selfsigned-ca"</code></div>
-          <div class="card-row muted">Restart browser after import.</div>
+          <div class="card-row muted"><strong>Windows (Admin)</strong>: <code>certutil -addstore -f Root dsconnector-ca.crt</code></div>
+          <div class="card-row muted"><strong>Verify</strong>: <code>certutil -store Root | findstr /i "selfsigned-ca"</code></div>
+          <div class="card-row muted"><strong>Then</strong>: restart your browser.</div>
         </div>
       """
 
       html = f"""<!doctype html>
-    <html lang="nl">
+    <html lang="en">
     <head>
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -188,6 +186,8 @@ data:
         .card {{ background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px; }}
         .card-title {{ font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.8; margin-bottom: 8px; }}
         .card-row {{ margin-top: 6px; }}
+        .card-tls {{ border-color: rgba(16, 185, 129, 0.55); box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.10) inset; }}
+        .card-headlamp {{ border-color: rgba(59, 130, 246, 0.55); box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.10) inset; }}
         button {{ background: #2563eb; color: #fff; border: 0; border-radius: 8px; padding: 8px 10px; cursor: pointer; font-weight: 600; }}
         button:disabled {{ opacity: 0.5; cursor: default; }}
         table {{ width: 100%; border-collapse: collapse; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; overflow: hidden; }}
@@ -198,7 +198,6 @@ data:
         a:hover {{ text-decoration: underline; }}
         code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 6px; }}
         .note {{ white-space: nowrap; }}
-        .type {{ white-space: nowrap; opacity: 0.9; }}
         .url {{ word-break: break-all; }}
         .muted {{ opacity: 0.75; }}
         footer {{ margin-top: 10px; font-size: 12px; opacity: 0.7; }}
@@ -207,7 +206,7 @@ data:
     <body>
       <header>
         <h1>DSC URL Portal</h1>
-        <div class="sub">Gebaseerd op Kubernetes Ingress (Traefik). Laatst ververst: {now}</div>
+        <div class="sub">Based on Kubernetes Ingress (Traefik). Last refresh: {now}</div>
       </header>
       <main>
         <div class="grid">
@@ -217,18 +216,16 @@ data:
         <table>
           <thead>
             <tr>
-              <th>Type</th>
               <th>URL</th>
-              <th>Ingress</th>
               <th>Info</th>
             </tr>
           </thead>
           <tbody>
-            {rows if rows else "<tr><td colspan='4'>Geen ingresses gevonden of geen rechten om ze te lezen.</td></tr>"}
+            {rows if rows else "<tr><td colspan='2'>No ingresses found (or missing permissions).</td></tr>"}
           </tbody>
         </table>
         <footer>
-          Tip: als je nog certificaatwarnings ziet, installeer de cluster CA en herstart je browser.
+          Tip: if you still see certificate warnings, install the cluster CA and restart your browser.
         </footer>
       </main>
       <script>
