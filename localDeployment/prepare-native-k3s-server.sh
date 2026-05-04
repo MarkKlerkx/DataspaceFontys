@@ -6,7 +6,8 @@
 # 3) Patch pom.xml for native host k3s (skip docker run/apply in k3s plugin)
 # 4) Replace 127.0.0.1.nip.io with {INTERNAL_IP}.nip.io
 # 5) Replace {INTERNAL_IP} with detected/provided server IP
-# 6) Build/deploy and apply manifests with host kubectl
+# 6) Ensure native k3s is installed/running and kubeconfig is usable
+# 7) Build/deploy and apply manifests with host kubectl
 #
 # Usage:
 #   ./prepare-native-k3s-server.sh --repo /path/to/repo
@@ -19,6 +20,7 @@ FORCE_YES=0
 INCLUDE_DOCS=0
 SKIP_BUILD=0
 SKIP_APPLY=0
+SKIP_K3S_INSTALL=0
 IP_ARG=""
 
 POM_FILE=""
@@ -38,6 +40,7 @@ Options:
   --ip <address>      Internal server IP to materialize
   --yes               Skip confirmation prompt
   --include-docs      Also update doc/**/*.md and doc/**/*.drawio
+  --skip-k3s-install  Do not install/start k3s automatically
   --skip-build        Do not run Maven build/deploy
   --skip-apply        Do not run kubectl apply for target/k3s manifests
   -h, --help          Show this help
@@ -147,11 +150,18 @@ print_findings() {
   echo "1) Upsert <k3s.skipRun>true</k3s.skipRun> and <k3s.skipApply>true</k3s.skipApply> in pom.xml"
   echo "2) Replace 127.0.0.1.nip.io -> {INTERNAL_IP}.nip.io in candidate files"
   echo "3) Replace {INTERNAL_IP} -> $TARGET_IP in candidate files"
-  echo "4) Run: mvn -f \"$POM_FILE\" clean package -Plocal"
-  if [[ "$SKIP_APPLY" -eq 1 ]]; then
-    echo "5) Skip kubectl apply (--skip-apply set)"
+  if [[ "$SKIP_K3S_INSTALL" -eq 1 ]]; then
+    echo "4) Skip native k3s install/start (--skip-k3s-install set)"
   else
-    echo "5) Run kubectl apply in target/k3s (ordered infra + full tree)"
+    echo "4) Ensure k3s is installed and running as system service"
+    echo "   - install via: curl -sfL https://get.k3s.io | sh -   (when missing)"
+    echo "   - ensure kubeconfig at \$HOME/.kube/config for current user"
+  fi
+  echo "5) Run: mvn -f \"$POM_FILE\" clean deploy -Plocal -Dhelm.version=3.20.2 | tee build.log"
+  if [[ "$SKIP_APPLY" -eq 1 ]]; then
+    echo "6) Skip kubectl apply (--skip-apply set)"
+  else
+    echo "6) Run kubectl apply in target/k3s (ordered infra + full tree)"
   fi
   echo "==================================="
 }
@@ -184,6 +194,45 @@ rewrite_hosts() {
     sed -i 's/127\.0\.0\.1\.nip\.io/{INTERNAL_IP}.nip.io/g' "$f"
     sed -i "s/{INTERNAL_IP}/$TARGET_IP/g" "$f"
   done
+}
+
+k3s_service_exists() {
+  command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files 2>/dev/null | grep -q '^k3s\.service'
+}
+
+ensure_k3s_and_kubeconfig() {
+  if [[ "$SKIP_K3S_INSTALL" -eq 1 ]]; then
+    echo "Skipping k3s install/start checks (--skip-k3s-install)."
+    return 0
+  fi
+
+  need_cmd curl
+  need_cmd kubectl
+  need_cmd sudo
+
+  if ! k3s_service_exists; then
+    echo "k3s.service not found. Installing native k3s..."
+    curl -sfL https://get.k3s.io | sudo sh -
+  fi
+
+  echo "Ensuring k3s service is enabled and running..."
+  sudo systemctl enable k3s >/dev/null 2>&1 || true
+  sudo systemctl start k3s
+
+  if [[ ! -f /etc/rancher/k3s/k3s.yaml ]]; then
+    echo "error: /etc/rancher/k3s/k3s.yaml not found after k3s start" >&2
+    exit 1
+  fi
+
+  mkdir -p "$HOME/.kube"
+  sudo cp /etc/rancher/k3s/k3s.yaml "$HOME/.kube/config"
+  sudo chown "$USER:$USER" "$HOME/.kube/config"
+  chmod 600 "$HOME/.kube/config"
+  export KUBECONFIG="$HOME/.kube/config"
+
+  echo "Verifying kubectl connectivity..."
+  kubectl --kubeconfig="$KUBECONFIG" cluster-info >/dev/null
+  kubectl --kubeconfig="$KUBECONFIG" get nodes
 }
 
 build_manifests() {
@@ -230,6 +279,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --yes) FORCE_YES=1; shift ;;
     --include-docs) INCLUDE_DOCS=1; shift ;;
+    --skip-k3s-install) SKIP_K3S_INSTALL=1; shift ;;
     --skip-build) SKIP_BUILD=1; shift ;;
     --skip-apply) SKIP_APPLY=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -253,6 +303,7 @@ cp "$POM_FILE" "$POM_FILE.bak.$(date +%Y%m%d%H%M%S)"
 upsert_pom_property "k3s.skipRun" "true"
 upsert_pom_property "k3s.skipApply" "true"
 rewrite_hosts
+ensure_k3s_and_kubeconfig
 build_manifests
 apply_manifests
 
