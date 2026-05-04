@@ -15,6 +15,7 @@ data:
 
     OUT_PATH = os.environ.get("OUT_PATH", "/www/index.html")
     CA_OUT = os.environ.get("CA_OUT", "/www/dsconnector-ca.crt")
+    PORTAL_VERSION = os.environ.get("PORTAL_VERSION", "dev")
 
     API_HOST = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
     API_PORT = os.environ.get("KUBERNETES_SERVICE_PORT", "443")
@@ -259,6 +260,7 @@ data:
           </table>
           <footer>
             Tip: if you still see certificate warnings, install the cluster CA and restart your browser.
+            <span class="muted" style="float:right;">v{PORTAL_VERSION}</span>
           </footer>
         </div>
       </main>
@@ -319,6 +321,7 @@ data:
 
     def write_fallback_index(msg: str):
       os.makedirs(WWW_DIR, exist_ok=True)
+      portal_version = os.environ.get("PORTAL_VERSION", "dev")
       html = f"""<!doctype html>
     <html lang="en">
     <head>
@@ -339,6 +342,7 @@ data:
         <p>It will retry every 10 seconds.</p>
         <h2>Last error</h2>
         <pre><code>{msg}</code></pre>
+        <p style="opacity:0.7;font-size:12px;margin-top:12px;">v{portal_version}</p>
       </main>
     </body>
     </html>

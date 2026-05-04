@@ -29,6 +29,8 @@ spec:
               value: /www/dsconnector-ca.crt
             - name: WWW_DIR
               value: /www
+            - name: PORTAL_VERSION
+              value: "2026-05-04"
           command: ["python3", "/app/server.py"]
           volumeMounts:
             - name: app
