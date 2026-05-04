@@ -302,6 +302,7 @@ data:
     import time
     import json
     import ssl
+    import base64
     import urllib.request
     import urllib.error
     from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
@@ -366,6 +367,21 @@ data:
       except urllib.error.HTTPError as e:
         return e.code, e.read().decode("utf-8")
 
+    def api_get(path: str) -> tuple[int, str]:
+      with open(SA_TOKEN_PATH, "r", encoding="utf-8") as f:
+        token = f.read().strip()
+      ctx = ssl.create_default_context(cafile=SA_CA_PATH)
+      req = urllib.request.Request(
+        API_BASE + path,
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+        method="GET",
+      )
+      try:
+        with urllib.request.urlopen(req, context=ctx, timeout=10) as resp:
+          return resp.getcode(), resp.read().decode("utf-8")
+      except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8")
+
     def run_generate_loop():
       while True:
         try:
@@ -382,6 +398,31 @@ data:
 
       def do_GET(self):
         path = urlparse(self.path).path
+        if path == "/dsconnector-ca.crt":
+          code, body = api_get("/api/v1/namespaces/cert-manager/secrets/ca-secret")
+          if code >= 400:
+            self.send_response(code)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.end_headers()
+            self.wfile.write((body.strip() + "\n").encode("utf-8"))
+            return
+          try:
+            data = json.loads(body)
+            b64 = (((data.get("data") or {}).get("tls.crt")) or "")
+            crt = base64.b64decode(b64.encode("utf-8")) if b64 else b""
+            if not crt:
+              raise ValueError("ca-secret missing data.tls.crt")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/x-x509-ca-cert")
+            self.send_header("Content-Disposition", "attachment; filename=dsconnector-ca.crt")
+            self.end_headers()
+            self.wfile.write(crt)
+          except Exception as e:
+            self.send_response(500)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.end_headers()
+            self.wfile.write((f"failed to serve ca cert: {e}\n").encode("utf-8"))
+          return
         if path == "/api/headlamp-token":
           code, body = api_post(
             "/api/v1/namespaces/kube-system/serviceaccounts/my-headlamp/token",
