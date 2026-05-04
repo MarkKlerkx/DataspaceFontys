@@ -23,6 +23,7 @@ SKIP_BUILD=0
 SKIP_APPLY=0
 SKIP_K3S_INSTALL=0
 DO_CLONE=0
+SKIP_HEADLAMP=0
 IP_ARG=""
 
 POM_FILE=""
@@ -45,6 +46,7 @@ Options:
   --yes               Skip confirmation prompt
   --include-docs      Also update doc/**/*.md and doc/**/*.drawio
   --skip-k3s-install  Do not install/start k3s automatically
+  --skip-headlamp     Do not install/configure Headlamp UI
   --skip-build        Do not run Maven build/deploy
   --skip-apply        Do not run kubectl apply for target/k3s manifests
   -h, --help          Show this help
@@ -296,6 +298,85 @@ ensure_k3s_and_kubeconfig() {
   echo "k3s is healthy. Continuing with Maven deploy and kubectl apply..."
 }
 
+install_headlamp() {
+  if [[ "$SKIP_HEADLAMP" -eq 1 ]]; then
+    echo "Skipping Headlamp install/config (--skip-headlamp)."
+    return 0
+  fi
+
+  need_cmd helm
+  need_cmd kubectl
+
+  if [[ -z "${KUBECONFIG:-}" && -f "$HOME/.kube/config" ]]; then
+    export KUBECONFIG="$HOME/.kube/config"
+  fi
+  if [[ -z "${KUBECONFIG:-}" ]]; then
+    echo "error: KUBECONFIG is not set; cannot install Headlamp." >&2
+    exit 1
+  fi
+
+  echo
+  echo "=== Installing Headlamp (Kubernetes UI) ==="
+  helm repo add headlamp https://kubernetes-sigs.github.io/headlamp/ >/dev/null 2>&1 || true
+  helm repo update >/dev/null 2>&1 || true
+
+  local release="my-headlamp"
+  local ns="kube-system"
+
+  # Use upgrade --install to be idempotent.
+  helm upgrade --install "$release" headlamp/headlamp --namespace "$ns"
+
+  # Ensure NodePort so it's reachable from outside the node.
+  kubectl --kubeconfig="$KUBECONFIG" -n "$ns" patch service "$release" -p '{"spec":{"type":"NodePort"}}' >/dev/null
+
+  # Ensure the serviceaccount exists and has permissions for UI access.
+  if ! kubectl --kubeconfig="$KUBECONFIG" -n "$ns" get sa "$release" >/dev/null 2>&1; then
+    kubectl --kubeconfig="$KUBECONFIG" -n "$ns" create serviceaccount "$release" >/dev/null
+  fi
+  kubectl --kubeconfig="$KUBECONFIG" create clusterrolebinding "${release}-admin" \
+    --clusterrole=cluster-admin \
+    --serviceaccount="${ns}:${release}" >/dev/null 2>&1 || true
+
+  # Determine the chosen NodePort and print clear access instructions.
+  local node_port=""
+  node_port="$(kubectl --kubeconfig="$KUBECONFIG" -n "$ns" get svc "$release" -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || true)"
+
+  # Add convenience function to the user's interactive shell.
+  local bashrc="$HOME/.bashrc"
+  local fn_marker_begin="# >>> headlamp-token (added by prepare-native-k3s-server.sh) >>>"
+  local fn_marker_end="# <<< headlamp-token <<<"
+  if [[ ! -f "$bashrc" ]]; then
+    touch "$bashrc"
+  fi
+  if ! grep -qF "$fn_marker_begin" "$bashrc" 2>/dev/null; then
+    cat >>"$bashrc" <<EOF
+
+$fn_marker_begin
+headlamp-token() {
+  sudo kubectl create token ${release} --namespace ${ns}
+}
+$fn_marker_end
+EOF
+  fi
+
+  echo
+  echo "Headlamp is installed."
+  if [[ -n "$node_port" ]]; then
+    echo "Headlamp NodePort: $node_port"
+    echo "Open: http://${TARGET_IP}:${node_port}"
+  else
+    echo "warning: could not determine Headlamp NodePort automatically. Run:"
+    echo "  kubectl -n $ns get svc $release -o wide"
+  fi
+  echo
+  echo "Headlamp token function added to: $bashrc"
+  echo "To activate in your current shell:"
+  echo "  source $bashrc"
+  echo "Then get a token with:"
+  echo "  headlamp-token"
+  echo "========================================="
+}
+
 build_manifests() {
   if [[ "$SKIP_BUILD" -eq 1 ]]; then
     echo "Skipping Maven build (--skip-build)."
@@ -406,6 +487,7 @@ while [[ $# -gt 0 ]]; do
     --yes) FORCE_YES=1; shift ;;
     --include-docs) INCLUDE_DOCS=1; shift ;;
     --skip-k3s-install) SKIP_K3S_INSTALL=1; shift ;;
+    --skip-headlamp) SKIP_HEADLAMP=1; shift ;;
     --skip-build) SKIP_BUILD=1; shift ;;
     --skip-apply) SKIP_APPLY=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -440,6 +522,7 @@ upsert_pom_property "k3s.skipRun" "true"
 upsert_pom_property "k3s.skipApply" "true"
 rewrite_hosts
 ensure_k3s_and_kubeconfig
+install_headlamp
 build_manifests
 apply_manifests
 
