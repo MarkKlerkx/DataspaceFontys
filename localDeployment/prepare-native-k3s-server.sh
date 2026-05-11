@@ -384,8 +384,10 @@ configure_dockerhub_auth_for_k3s() {
 
   echo
   echo "=== Docker Hub authentication (optional, recommended) ==="
-  echo "Docker Hub may rate-limit anonymous image pulls."
-  echo "If you have a Docker Hub username + access token, enter them now to configure k3s pulls."
+  echo "Docker Hub may rate-limit anonymous pulls for:"
+  echo "  - container images pulled by k3s/containerd, and"
+  echo "  - OCI Helm charts (e.g. oci://registry-1.docker.io/bitnamicharts/...) during mvn."
+  echo "If you have a Docker Hub username + access token, enter them now."
   echo "Leave username empty to skip."
 
   if [[ -z "$username" ]]; then
@@ -441,7 +443,39 @@ EOF
     echo "warning: systemctl not found; please restart k3s to apply Docker Hub auth." >&2
   fi
 
-  echo "Docker Hub auth configured for k3s pulls."
+  export DOCKERHUB_USERNAME="$username"
+  export DOCKERHUB_TOKEN="$token"
+
+  echo "Docker Hub auth configured for k3s pulls (and exported for Helm OCI login before Maven)."
+}
+
+# Helm downloads OCI charts (bitnamicharts, etc.) with its own client; k3s registries.yaml does not apply.
+configure_helm_dockerhub_registry_login() {
+  if [[ "${SKIP_DOCKERHUB_AUTH:-0}" -eq 1 ]]; then
+    return 0
+  fi
+  if [[ -z "${DOCKERHUB_USERNAME:-}" || -z "${DOCKERHUB_TOKEN:-}" ]]; then
+    return 0
+  fi
+
+  local helm_bin=""
+  if command -v helm >/dev/null 2>&1; then
+    helm_bin="$(command -v helm)"
+  elif [[ -n "${REPO_ROOT:-}" && -x "$REPO_ROOT/target/helm/helm" ]]; then
+    helm_bin="$REPO_ROOT/target/helm/helm"
+  else
+    need_cmd helm
+    helm_bin="$(command -v helm)"
+  fi
+
+  echo
+  echo "=== Helm: Docker Hub OCI registry login ==="
+  echo "Using helm: $helm_bin"
+  if ! printf '%s\n' "$DOCKERHUB_TOKEN" | "$helm_bin" registry login registry-1.docker.io -u "$DOCKERHUB_USERNAME" --password-stdin; then
+    echo "warning: helm registry login failed; mvn helm-maven-plugin may still use unauthenticated OCI pulls." >&2
+  else
+    echo "Helm is logged in to registry-1.docker.io (OCI chart pulls should use your account limits)."
+  fi
 }
 
 install_headlamp() {
@@ -538,6 +572,7 @@ build_manifests() {
     return 0
   fi
   need_cmd mvn
+  configure_helm_dockerhub_registry_login
   mvn -f "$POM_FILE" clean deploy -Plocal -Dhelm.version=3.20.2
 }
 
