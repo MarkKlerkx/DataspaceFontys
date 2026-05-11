@@ -56,6 +56,7 @@ Options:
   --skip-url-portal   Do not deploy the DSC URL portal (DataspaceFontys)
   --skip-build        Do not run Maven build/deploy
   --skip-apply        Do not run kubectl apply for target/k3s manifests
+  --skip-dockerhub-auth  Do not prompt/configure Docker Hub auth for k3s pulls
   -h, --help          Show this help
 EOF
 }
@@ -364,6 +365,83 @@ EOF
   echo "To activate in your current shell:"
   echo "  source $bashrc"
   echo "k3s is healthy. Continuing with Maven deploy and kubectl apply..."
+}
+
+configure_dockerhub_auth_for_k3s() {
+  # Docker Hub rate limits affect anonymous pulls. In this project, images are typically pulled
+  # by k3s/containerd during/after kubectl apply (not by this script directly).
+  #
+  # k3s reads registry auth from /etc/rancher/k3s/registries.yaml.
+  if [[ "${SKIP_DOCKERHUB_AUTH:-0}" -eq 1 ]]; then
+    echo "Skipping Docker Hub auth configuration (--skip-dockerhub-auth)."
+    return 0
+  fi
+
+  need_cmd sudo
+
+  local username="${DOCKERHUB_USERNAME:-}"
+  local token="${DOCKERHUB_TOKEN:-}"
+
+  echo
+  echo "=== Docker Hub authentication (optional, recommended) ==="
+  echo "Docker Hub may rate-limit anonymous image pulls."
+  echo "If you have a Docker Hub username + access token, enter them now to configure k3s pulls."
+  echo "Leave username empty to skip."
+
+  if [[ -z "$username" ]]; then
+    read -r -p "Docker Hub username: " username
+  else
+    echo "Docker Hub username detected from DOCKERHUB_USERNAME env var."
+  fi
+
+  if [[ -z "$username" ]]; then
+    echo "Docker Hub auth skipped."
+    return 0
+  fi
+
+  if [[ -z "$token" ]]; then
+    read -r -s -p "Docker Hub token (input hidden): " token
+    echo
+  else
+    echo "Docker Hub token detected from DOCKERHUB_TOKEN env var."
+  fi
+
+  if [[ -z "$token" ]]; then
+    echo "warning: no token provided; skipping Docker Hub auth." >&2
+    return 0
+  fi
+
+  local reg_path="/etc/rancher/k3s/registries.yaml"
+  local tmp
+  tmp="$(mktemp)"
+
+  cat >"$tmp" <<EOF
+# >>> dockerhub-auth (added by prepare-native-k3s-server.sh) >>>
+mirrors:
+  docker.io:
+    endpoint:
+      - "https://registry-1.docker.io"
+configs:
+  "registry-1.docker.io":
+    auth:
+      username: "${username}"
+      password: "${token}"
+# <<< dockerhub-auth <<<
+EOF
+
+  echo "Writing k3s registry auth to: ${reg_path}"
+  sudo mkdir -p "$(dirname "$reg_path")"
+  sudo cp "$tmp" "$reg_path"
+  rm -f "$tmp"
+
+  if command -v systemctl >/dev/null 2>&1; then
+    echo "Restarting k3s to apply registry auth..."
+    sudo systemctl restart k3s
+  else
+    echo "warning: systemctl not found; please restart k3s to apply Docker Hub auth." >&2
+  fi
+
+  echo "Docker Hub auth configured for k3s pulls."
 }
 
 install_headlamp() {
@@ -682,6 +760,7 @@ while [[ $# -gt 0 ]]; do
     --skip-url-portal) DEPLOY_URL_PORTAL=0; shift ;;
     --skip-build) SKIP_BUILD=1; shift ;;
     --skip-apply) SKIP_APPLY=1; shift ;;
+    --skip-dockerhub-auth) SKIP_DOCKERHUB_AUTH=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *)
       echo "error: unknown option $1" >&2
@@ -715,6 +794,7 @@ upsert_pom_property "k3s.skipApply" "true"
 rewrite_hosts
 rewrite_demo_domains
 ensure_k3s_and_kubeconfig
+configure_dockerhub_auth_for_k3s
 install_headlamp
 build_manifests
 apply_manifests
